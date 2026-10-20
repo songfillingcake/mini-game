@@ -40,6 +40,11 @@ button:focus-visible, a:focus-visible { outline: 3px solid #e98a70; outline-offs
 .header-note { display: flex; align-items: center; gap: 9px; color: #75847b; font-size: 12px; font-weight: 800; letter-spacing: .025em; }
 .online-dot { width: 7px; height: 7px; border-radius: 50%; background: #77ae8c; box-shadow: 0 0 0 4px rgba(119, 174, 140, .14); }
 .header-spark { color: #e9a856; font-size: 17px; margin-left: 4px; }
+.header-actions, .play-actions { display: flex; align-items: center; gap: 16px; }
+.sound-toggle { appearance: none; display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 37px; padding: 0 11px; border: 1px solid rgba(48, 74, 64, .14); border-radius: 11px; background: rgba(252, 250, 244, .74); color: #63796c; cursor: pointer; font-size: 11px; font-weight: 800; transition: background .2s ease, transform .2s ease; }
+.sound-toggle:hover { background: #fff; transform: translateY(-1px); }
+.sound-icon { color: #d58369; font-size: 17px; line-height: 1; }
+.sound-label { white-space: nowrap; }
 
 .home-main { width: min(1190px, calc(100% - 72px)); margin: 0 auto; position: relative; z-index: 1; }
 .intro { min-height: 278px; position: relative; padding: 24px 0 31px; }
@@ -95,6 +100,7 @@ button:focus-visible, a:focus-visible { outline: 3px solid #e98a70; outline-offs
 .pause-button:disabled { opacity: .44; cursor: default; }
 .pause-button.is-resume { color: #47836e; }
 .pause-button span { font-size: 11px; }
+.play-actions { gap: 8px; }
 .play-main { width: min(970px, calc(100% - 48px)); margin: 4px auto 0; }
 .game-heading { display: flex; align-items: center; gap: 13px; margin: 0 0 13px 6px; position: relative; }
 .game-heading-icon { width: 42px; height: 42px; display: grid; place-items: center; border-radius: 14px; background: #e5eee2; font-size: 23px; }
@@ -157,6 +163,7 @@ button:focus-visible, a:focus-visible { outline: 3px solid #e98a70; outline-offs
   .brand-mark { width: 31px; height: 31px; }
   .brand-name { font-size: 15px; }
   .header-note { font-size: 10px; }
+  .header-actions { gap: 9px; }
   .home-main { width: calc(100% - 30px); }
   .intro { min-height: 235px; padding-top: 22px; }
   .intro h1 { margin-top: 18px; font-size: 54px; }
@@ -188,6 +195,10 @@ button:focus-visible, a:focus-visible { outline: 3px solid #e98a70; outline-offs
   .back-label { font-size: 10px; }
   .pause-button { min-width: 40px; min-height: 37px; padding: 0 8px; }
   .pause-button span { display: none; }
+  .play-actions { gap: 6px; }
+  .sound-toggle { min-height: 37px; min-width: 40px; padding: 0 8px; }
+  .sound-label { display: none; }
+  .header-note { display: none; }
   .play-main { width: calc(100% - 18px); margin-top: 0; }
   .game-heading { margin: 0 0 8px 5px; }
   .game-heading-icon { width: 35px; height: 35px; font-size: 19px; border-radius: 11px; }

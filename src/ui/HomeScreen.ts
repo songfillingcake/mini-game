@@ -1,5 +1,6 @@
 import { getBest } from '../core/Storage';
 import { gameCards } from '../games';
+import { renderSoundToggle } from './SoundToggle';
 
 export function renderHome(): string {
   const cards = gameCards.map((game, index) => {
@@ -16,7 +17,7 @@ export function renderHome(): string {
 
   return '<div class="home-page">' +
     '<header class="site-header"><a class="brand" href="#" aria-label="口袋游乐场首页"><span class="brand-mark"><span></span><span></span><span></span><span></span></span><span class="brand-name">口袋游乐场<small>POCKET PLAY</small></span></a>' +
-    '<div class="header-note"><span class="online-dot"></span> 三款轻松小游戏 <span class="header-spark">✦</span></div></header>' +
+    '<div class="header-actions">' + renderSoundToggle() + '<div class="header-note"><span class="online-dot"></span> 三款轻松小游戏 <span class="header-spark">✦</span></div></div></header>' +
     '<main class="home-main"><section class="intro"><div class="eyebrow"><span class="eyebrow-line"></span> 小小休息一下 <span class="eyebrow-line"></span></div>' +
     '<h1>今天想玩点<br /><span>什么？</span><i class="title-star">✳</i></h1>' +
     '<p>选一款小游戏，马上开始。<br class="mobile-break" />每一局都很短，再玩一次也没关系。</p>' +

@@ -1,4 +1,5 @@
 import { clamp, drawText, HEIGHT, roundedRect, WIDTH } from '../../core/Game';
+import { audio } from '../../core/Audio';
 import type { GameControls, MiniGame } from '../../core/Game';
 
 interface Platform {
@@ -71,10 +72,16 @@ export class JumperGame implements MiniGame {
         if (crossed && overlaps) {
           this.playerY = platform.y - 22;
           this.velocityY = platform.spring ? -860 : -680;
-          if (platform.spring) this.springFlash = 0.4;
+          if (platform.spring) {
+            this.springFlash = 0.4;
+            audio.play('spring');
+          } else {
+            audio.play('bounce');
+          }
           if (platform.hasStar && !platform.collected) {
             platform.collected = true;
             this.bonus += 30;
+            audio.play('star');
           }
           break;
         }

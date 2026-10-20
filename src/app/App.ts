@@ -1,9 +1,11 @@
 import { CanvasSurface } from '../core/CanvasSurface';
 import { GameLoop } from '../core/GameLoop';
+import { audio } from '../core/Audio';
 import { HEIGHT, WIDTH, type GameControls, type GameId, type MiniGame } from '../core/Game';
 import { getBest, saveBest } from '../core/Storage';
 import { createGame, gameCards } from '../games';
 import { renderHome } from '../ui/HomeScreen';
+import { renderSoundToggle, syncSoundToggle } from '../ui/SoundToggle';
 
 type AppState = 'home' | 'ready' | 'playing' | 'paused' | 'ended';
 
@@ -28,6 +30,7 @@ export class App {
     this.disposeGame();
     this.state = 'home';
     this.root.innerHTML = renderHome();
+    this.bindSoundToggle();
     this.root.querySelectorAll<HTMLButtonElement>('[data-game]').forEach((button) => {
       button.addEventListener('click', () => this.openGame(button.dataset.game as GameId));
     });
@@ -57,7 +60,7 @@ export class App {
     return '<div class="play-page"><header class="play-header">' +
       '<button class="back-button" id="back-button" aria-label="返回游戏大厅"><span>←</span><span class="back-label">游戏大厅</span></button>' +
       '<a class="brand compact-brand" href="#" aria-label="口袋游乐场"><span class="brand-mark"><span></span><span></span><span></span><span></span></span><span class="brand-name">口袋游乐场<small>POCKET PLAY</small></span></a>' +
-      '<button class="pause-button" id="pause-button" aria-label="暂停游戏">Ⅱ <span>暂停</span></button></header>' +
+      '<div class="play-actions">' + renderSoundToggle() + '<button class="pause-button" id="pause-button" aria-label="暂停游戏">Ⅱ <span>暂停</span></button></div></header>' +
       '<main class="play-main"><div class="game-heading"><div class="game-heading-icon">' + icon + '</div><div><span class="game-eyebrow">NOW PLAYING</span><h1>' + title + '</h1></div><div class="heading-decoration">✦</div></div>' +
       '<section class="game-panel"><div class="hud"><div class="hud-item"><span class="hud-label">得分</span><strong id="score-value">0</strong></div><div class="hud-item"><span class="hud-label">剩余时间</span><strong id="time-value">—</strong></div><div class="hud-item hud-status"><span class="hud-label">状态</span><strong id="status-value">准备中</strong></div><div class="hud-item hud-best"><span class="hud-label">个人最佳</span><strong id="best-value">' + this.bestScore + '</strong></div></div>' +
       '<div class="canvas-wrap"><canvas id="game-canvas" width="960" height="540" aria-label="' + title + '游戏区域"></canvas>' +
@@ -68,6 +71,7 @@ export class App {
   }
 
   private bindGameUi(): void {
+    this.bindSoundToggle();
     this.root.querySelector('#back-button')?.addEventListener('click', () => this.showHome());
     this.root.querySelector('#pause-button')?.addEventListener('click', () => this.togglePause());
     this.root.querySelector('#overlay-action')?.addEventListener('click', () => {
@@ -89,6 +93,12 @@ export class App {
       button.addEventListener('pointerup', release);
       button.addEventListener('pointercancel', release);
       button.addEventListener('lostpointercapture', release);
+    });
+  }
+
+  private bindSoundToggle(): void {
+    this.root.querySelector('[data-sound-toggle]')?.addEventListener('click', () => {
+      syncSoundToggle(this.root, audio.toggle());
     });
   }
 
@@ -164,6 +174,7 @@ export class App {
       if (this.game.score > this.bestScore) this.bestScore = saveBest(this.game.id, this.game.score);
       if (this.game.over) {
         this.state = 'ended';
+        audio.play('finish');
         this.showOverlay();
       }
     }
@@ -173,6 +184,7 @@ export class App {
 
   private startGame(): void {
     this.game?.start();
+    audio.play('start');
     this.state = 'playing';
     this.keys.clear();
     this.showOverlay();

@@ -1,4 +1,5 @@
 import { clamp, drawText, HEIGHT, roundedRect, WIDTH } from '../../core/Game';
+import { audio } from '../../core/Audio';
 import type { GameControls, MiniGame } from '../../core/Game';
 
 interface FallingThing {
@@ -70,9 +71,11 @@ export class DodgerGame implements MiniGame {
         if (thing.kind === 'star') {
           this.stars += 1;
           this.scoreValue += 25;
+          audio.play('star');
         } else {
           this.lifeCount -= 1;
           this.hitFlash = 0.35;
+          audio.play('hit');
           if (this.lifeCount <= 0) {
             this.ended = true;
             this.endText = '撞到了三次，收集到 ' + this.stars + ' 顆星星';

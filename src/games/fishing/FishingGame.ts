@@ -1,4 +1,5 @@
 import { clamp, drawText, HEIGHT, roundedRect, WIDTH } from '../../core/Game';
+import { audio } from '../../core/Audio';
 import type { GameControls, MiniGame } from '../../core/Game';
 
 type FishingPhase = 'waiting' | 'bite' | 'fake';
@@ -48,11 +49,13 @@ export class FishingGame implements MiniGame {
     if (this.phase === 'waiting' && this.phaseTimer <= 0) {
       this.phase = Math.random() < 0.25 ? 'fake' : 'bite';
       this.phaseTimer = this.phase === 'fake' ? 0.62 : 0.92;
+      audio.play(this.phase === 'fake' ? 'fake' : 'bite');
       this.message = this.phase === 'fake' ? '好像动了一下？' : '咬钩啦！快点收竿！';
     } else if (this.phase !== 'waiting' && this.phaseTimer <= 0) {
       if (this.phase === 'bite') {
         this.chain = 0;
         this.message = '鱼溜走了，再等等看';
+        audio.play('miss');
       } else {
         this.message = '差点上当，继续等鱼';
       }
@@ -72,11 +75,13 @@ export class FishingGame implements MiniGame {
       this.chain += 1;
       this.scoreValue += fish.points + Math.min(this.chain - 1, 5) * 3;
       this.message = '钓到' + fish.name + '！+' + (fish.points + Math.min(this.chain - 1, 5) * 3);
+      audio.play('catch');
       this.catchFlash = 0.55;
       this.nextWait();
     } else if (this.phase === 'fake') {
       this.chain = 0;
       this.message = '嘿嘿，是假动作！';
+      audio.play('fake');
       this.nextWait();
     } else {
       this.chain = 0;
