@@ -17,6 +17,10 @@ npm run dev
 npm run build
 ```
 
+## 发布到 GitHub Pages
+
+仓库已包含自动部署工作流。将改动提交并推送到 `main` 后，在 GitHub 仓库中打开 **Settings → Pages**，将 **Build and deployment → Source** 设为 **GitHub Actions**。工作流会构建并发布 `dist/`，成功后网站地址为 `https://songfillingcake.github.io/mini-game/`。之后每次推送到 `main` 都会自动更新。
+
 ## 技术结构
 
 - Vite + TypeScript
