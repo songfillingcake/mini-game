@@ -1,6 +1,7 @@
 import { clamp, drawText, HEIGHT, roundedRect, WIDTH } from '../../core/Game';
 import { audio } from '../../core/Audio';
 import type { GameControls, MiniGame } from '../../core/Game';
+import { fishSpecies, getFishJournalSummary, recordFishCatch, type FishSpecies } from './FishJournal';
 
 type FishingPhase = 'waiting' | 'bite' | 'fake';
 
@@ -12,6 +13,8 @@ export class FishingGame implements MiniGame {
   private phaseTimer = 1.8;
   private chain = 0;
   private catches = 0;
+  private discoveries = 0;
+  private journalDiscovered = 0;
   private message = '鱼竿准备好了，等鱼上钩';
   private catchFlash = 0;
   private scoreValue = 0;
@@ -20,7 +23,7 @@ export class FishingGame implements MiniGame {
   get score(): number { return this.scoreValue; }
   get timeLeft(): number { return Math.max(0, 60 - this.elapsed); }
   get over(): boolean { return this.ended; }
-  get outcome(): string { return '钓到了 ' + this.catches + ' 条鱼'; }
+  get outcome(): string { return '钓到了 ' + this.catches + ' 条鱼，新发现 ' + this.discoveries + ' 个鱼种'; }
   get statusText(): string { return this.chain > 1 ? '连击 x' + this.chain : '收获 ' + this.catches + ' 条'; }
 
   start(): void {
@@ -29,6 +32,8 @@ export class FishingGame implements MiniGame {
     this.phaseTimer = 1.5;
     this.chain = 0;
     this.catches = 0;
+    this.discoveries = 0;
+    this.journalDiscovered = getFishJournalSummary().discovered;
     this.scoreValue = 0;
     this.catchFlash = 0;
     this.ended = false;
@@ -66,15 +71,17 @@ export class FishingGame implements MiniGame {
   press(): void {
     if (this.ended) return;
     if (this.phase === 'bite') {
-      const fish = [
-        { name: '小蓝鱼', points: 10, color: '#56c7d7' },
-        { name: '金鱼', points: 18, color: '#ffbd59' },
-        { name: '胖鲈鱼', points: 25, color: '#ef8068' },
-      ][Math.floor(Math.random() * 3)];
+      const fish = this.pickFish();
+      const isNew = recordFishCatch(fish.id);
       this.catches += 1;
       this.chain += 1;
-      this.scoreValue += fish.points + Math.min(this.chain - 1, 5) * 3;
-      this.message = '钓到' + fish.name + '！+' + (fish.points + Math.min(this.chain - 1, 5) * 3);
+      if (isNew) {
+        this.discoveries += 1;
+        this.journalDiscovered += 1;
+      }
+      const points = fish.points + Math.min(this.chain - 1, 5) * 3 + (isNew ? 20 : 0);
+      this.scoreValue += points;
+      this.message = (isNew ? '新发现：' : '钓到') + fish.name + '！+' + points;
       audio.play('catch');
       this.catchFlash = 0.55;
       this.nextWait();
@@ -174,6 +181,17 @@ export class FishingGame implements MiniGame {
     drawText(ctx, this.message, 690, 208, 23, this.phase === 'bite' ? '#df6a4f' : '#315d61', 800);
     drawText(ctx, '點一下或按空格收竿', 690, 244, 14, '#52797b', 600);
     drawText(ctx, '每次咬钩的窗口都很短，假动作不要上当', 480, 500, 14, 'rgba(255,255,255,.82)', 600);
+    drawText(ctx, '湖边图鉴 ' + this.journalDiscovered + '/' + fishSpecies.length + ' · 本局新发现 ' + this.discoveries + ' 种', 480, 474, 14, '#fff8df', 700);
+  }
+
+  private pickFish(): FishSpecies {
+    const totalWeight = fishSpecies.reduce((sum, fish) => sum + fish.weight, 0);
+    let roll = Math.random() * totalWeight;
+    for (const fish of fishSpecies) {
+      roll -= fish.weight;
+      if (roll < 0) return fish;
+    }
+    return fishSpecies[0];
   }
 
   private nextWait(): void {

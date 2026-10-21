@@ -60,6 +60,7 @@ button:focus-visible, a:focus-visible { outline: 3px solid #e98a70; outline-offs
 .game-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 19px; align-items: stretch; }
 .game-card { --accent: #79a993; --tint: #e4eee3; appearance: none; border: 1px solid rgba(42, 72, 63, .12); border-radius: 22px; background: #fcfaf4; padding: 19px 20px 18px; min-height: 360px; text-align: left; position: relative; display: flex; flex-direction: column; cursor: pointer; overflow: hidden; box-shadow: 0 6px 20px rgba(54, 75, 65, .045); transition: transform .22s ease, box-shadow .22s ease, border-color .22s ease; animation: rise-in .5s both; animation-delay: calc(var(--card-order) * 80ms); }
 .game-card:hover { transform: translateY(-7px) rotate(-.5deg); box-shadow: 0 16px 36px rgba(54, 75, 65, .11); border-color: color-mix(in srgb, var(--accent) 50%, white); }
+.game-card.is-featured { background: linear-gradient(145deg, #fffdf7, #f0f5e9); border-color: rgba(94, 145, 115, .26); }
 .game-card:active { transform: translateY(-2px) scale(.99); }
 .game-card.peach { --accent: #e4896f; --tint: #f8e1d2; }
 .game-card.lilac { --accent: #8f91b5; --tint: #e7e4f0; }
@@ -80,6 +81,24 @@ button:focus-visible, a:focus-visible { outline: 3px solid #e98a70; outline-offs
 .card-description { color: #7e8981; font-size: 12px; line-height: 1.55; margin-top: 12px; max-width: 290px; }
 .card-footer { margin-top: auto; padding-top: 17px; border-top: 1px dashed rgba(47, 75, 64, .17); display: flex; align-items: center; justify-content: space-between; color: #7c8981; font: 10px 'DM Mono', monospace; }
 .best-score { color: #bd8950; }
+.journal-panel { margin-top: 22px; padding: 24px 26px 25px; border: 1px solid rgba(42, 72, 63, .12); border-radius: 22px; background: rgba(252, 250, 244, .9); box-shadow: 0 7px 24px rgba(54, 75, 65, .045); }
+.journal-heading { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+.journal-eyebrow { color: #96a28f; font: 9px 'DM Mono', monospace; letter-spacing: .18em; }
+.journal-heading h2 { margin: 5px 0 3px; font-size: 23px; line-height: 1.2; font-weight: 900; letter-spacing: -.05em; }
+.journal-heading h2 span { display: inline-block; margin-left: 5px; color: #d18368; font: 700 12px 'DM Mono', monospace; letter-spacing: 0; vertical-align: 3px; }
+.journal-heading p { margin: 0; color: #7e8981; font-size: 11px; font-weight: 600; }
+.journal-catch-count { display: flex; align-items: baseline; gap: 6px; color: #8e9c8e; white-space: nowrap; }
+.journal-catch-count strong { color: #d18068; font-size: 24px; font-weight: 900; }
+.journal-catch-count span { font-size: 10px; font-weight: 800; }
+.journal-progress { height: 5px; margin: 17px 0 16px; overflow: hidden; border-radius: 9px; background: #e9eee5; }
+.journal-progress span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #8bb998, #e7bb67); transition: width .3s ease; }
+.journal-grid { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 9px; }
+.journal-fish { min-width: 0; min-height: 91px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; border: 1px solid rgba(50, 77, 67, .1); border-radius: 14px; background: #f7f6ee; text-align: center; }
+.journal-fish.is-found { border-color: rgba(107, 156, 126, .22); background: #f0f5e9; }
+.journal-fish-icon { min-height: 35px; font-size: 27px; line-height: 1.2; filter: drop-shadow(0 3px 2px rgba(50, 68, 55, .12)); }
+.journal-fish-icon.is-hidden { display: grid; width: 30px; height: 30px; place-items: center; border: 1px dashed #c7cec0; border-radius: 50%; color: #a5ae9e; font: 700 15px 'DM Mono', monospace; }
+.journal-fish-name { overflow: hidden; max-width: 100%; color: #53665b; font-size: 10px; font-weight: 900; text-overflow: ellipsis; white-space: nowrap; }
+.journal-fish-meta { color: #929b91; font-size: 8px; font-weight: 700; }
 .home-footer { display: flex; align-items: center; justify-content: center; gap: 15px; padding: 23px 0 31px; color: #899188; font-size: 11px; font-weight: 700; }
 .footer-dots { display: inline-flex; align-items: center; gap: 4px; }
 .footer-dots i { width: 4px; height: 4px; border-radius: 50%; background: #e79a75; }
@@ -156,6 +175,8 @@ button:focus-visible, a:focus-visible { outline: 3px solid #e98a70; outline-offs
   .card-title { font-size: 19px; }
   .card-description { font-size: 11px; }
   .card-footer { font-size: 9px; flex-wrap: wrap; gap: 6px; }
+  .journal-panel { padding: 19px; }
+  .journal-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
 
 @media (max-width: 620px) {
@@ -186,6 +207,18 @@ button:focus-visible, a:focus-visible { outline: 3px solid #e98a70; outline-offs
   .card-description { margin-top: 7px; font-size: 10px; line-height: 1.45; }
   .card-footer { margin-top: 9px; padding-top: 8px; font-size: 8px; }
   .home-footer { padding: 18px 0 24px; font-size: 9px; gap: 9px; }
+  .journal-panel { margin-top: 14px; padding: 16px 13px; border-radius: 17px; }
+  .journal-heading h2 { font-size: 19px; }
+  .journal-heading p { max-width: 220px; font-size: 10px; }
+  .journal-catch-count { align-self: flex-start; gap: 3px; }
+  .journal-catch-count strong { font-size: 20px; }
+  .journal-catch-count span { font-size: 8px; }
+  .journal-progress { margin: 13px 0; }
+  .journal-grid { gap: 6px; }
+  .journal-fish { min-height: 81px; border-radius: 12px; }
+  .journal-fish-icon { min-height: 31px; font-size: 24px; }
+  .journal-fish-name { font-size: 9px; }
+  .journal-fish-meta { font-size: 7px; }
   .shape-one { width: 55px; height: 55px; right: -20px; top: 22%; }
   .play-page { padding-bottom: 12px; }
   .play-header { height: 62px; }

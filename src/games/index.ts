@@ -18,12 +18,12 @@ export const gameCards: GameCardInfo[] = [
   {
     id: 'fishing',
     title: '猫猫钓鱼',
-    subtitle: '耐心一点，鱼快上钩啦',
-    description: '盯住浮标，在鱼咬钩的瞬间收竿。小心假动作，连击能拿更多分！',
+    subtitle: '耐心钓鱼，遇见新伙伴',
+    description: '盯住浮标，在鱼咬钩的瞬间收竿；钓到不同鱼种，就能填满湖边图鉴。',
     controls: '点击 / 空格',
     icon: '🎣',
     color: 'mint',
-    tag: '时机挑战',
+    tag: '收集图鉴',
   },
   {
     id: 'dodger',
