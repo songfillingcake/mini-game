@@ -6,10 +6,14 @@ const fishJournalKey = 'pocket-play-fish-journal-v1';
 const fishingBaitKey = 'pocket-play-fishing-bait-v1';
 const fishingZoneKey = 'pocket-play-fishing-zone-v1';
 const fishingProgressKey = 'pocket-play-fishing-progress-v1';
+const shellGameBestKey = prefix + 'shells';
+const stackerGameBestKey = prefix + 'stacker';
 const saveKeys = [
   prefix + 'fishing',
   prefix + 'dodger',
   prefix + 'jumper',
+  shellGameBestKey,
+  stackerGameBestKey,
   soundKey,
   fishJournalKey,
   fishingBaitKey,
@@ -30,7 +34,7 @@ function isValidSaveValue(key: typeof saveKeys[number], value: unknown): value i
     return Number.isFinite(score) && score >= 0 && score <= 1_000_000_000;
   }
   if (key === soundKey) return value === 'true' || value === 'false';
-  if (key === fishingBaitKey) return value === 'crumbs' || value === 'glow' || value === 'shrimp';
+  if (key === fishingBaitKey) return value === 'crumbs' || value === 'glow' || value === 'shrimp' || value === 'echo' || value === 'cloud' || value === 'starlight';
   if (key === fishingZoneKey) return value === 'lake' || value === 'reef' || value === 'moon' || value === 'aurora';
   try {
     const parsed: unknown = JSON.parse(value);
@@ -81,21 +85,26 @@ export function setSoundEnabled(enabled: boolean): void {
 
 export function exportSaveBackup(): string {
   const data = Object.fromEntries(saveKeys.map((key) => [key, localStorage.getItem(key)]));
-  return JSON.stringify({ format: saveFormat, version: 1, exportedAt: new Date().toISOString(), data }, null, 2);
+  return JSON.stringify({ format: saveFormat, version: 3, exportedAt: new Date().toISOString(), data }, null, 2);
 }
 
 export function importSaveBackup(serialized: string): boolean {
   try {
     const parsed: unknown = JSON.parse(serialized);
-    if (!isObject(parsed) || parsed.format !== saveFormat || parsed.version !== 1 || !isObject(parsed.data)) return false;
+    if (!isObject(parsed) || parsed.format !== saveFormat || (parsed.version !== 1 && parsed.version !== 2 && parsed.version !== 3) || !isObject(parsed.data)) return false;
     const data = parsed.data;
     const keys = Object.keys(data);
-    if (keys.length !== saveKeys.length || !saveKeys.every((key) => Object.prototype.hasOwnProperty.call(data, key))) return false;
-    if (!saveKeys.every((key) => isValidSaveValue(key, data[key]))) return false;
+    const expectedKeys = saveKeys.filter((key) => {
+      if (parsed.version === 1 && key === shellGameBestKey) return false;
+      if (parsed.version !== 3 && key === stackerGameBestKey) return false;
+      return true;
+    });
+    if (keys.length !== expectedKeys.length || !expectedKeys.every((key) => Object.prototype.hasOwnProperty.call(data, key))) return false;
+    if (!expectedKeys.every((key) => isValidSaveValue(key, data[key]))) return false;
 
     const previous = Object.fromEntries(saveKeys.map((key) => [key, localStorage.getItem(key)]));
     try {
-      for (const key of saveKeys) {
+      for (const key of expectedKeys) {
         const value = data[key];
         if (typeof value === 'string') localStorage.setItem(key, value);
         else localStorage.removeItem(key);

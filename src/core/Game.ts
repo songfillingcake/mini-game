@@ -1,4 +1,4 @@
-export type GameId = 'fishing' | 'dodger' | 'jumper';
+export type GameId = 'fishing' | 'dodger' | 'jumper' | 'shells' | 'stacker';
 
 export interface GameControls {
   keys: ReadonlySet<string>;
@@ -66,7 +66,16 @@ export function drawText(
   align: CanvasTextAlign = 'center',
 ): void {
   ctx.save();
-  ctx.font = weight + ' ' + size + 'px "Trebuchet MS", "Microsoft YaHei", sans-serif';
+  const canvas = ctx.canvas;
+  const transform = ctx.getTransform();
+  const cssScale = canvas.clientWidth > 0
+    ? Math.min(Math.abs(transform.a), Math.abs(transform.d)) / (canvas.width / canvas.clientWidth)
+    : 1;
+  const minimumRenderedSize = size <= 12 ? 11 : size <= 16 ? 12 : size <= 18 ? 13 : 0;
+  const readableSize = minimumRenderedSize > 0 && cssScale > 0 && cssScale < 1
+    ? Math.min(size * 1.5, Math.max(size, minimumRenderedSize / cssScale))
+    : size;
+  ctx.font = weight + ' ' + readableSize + 'px "Trebuchet MS", "Microsoft YaHei", sans-serif';
   ctx.textAlign = align;
   ctx.textBaseline = 'middle';
   ctx.fillStyle = color;

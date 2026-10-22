@@ -2,6 +2,8 @@ import type { GameId, MiniGame } from '../core/Game';
 import { DodgerGame } from './dodger/DodgerGame';
 import { FishingGame } from './fishing/FishingGame';
 import { JumperGame } from './jumper/JumperGame';
+import { ShellMatchGame } from './shells/ShellMatchGame';
+import { CloudStackGame } from './stacker/CloudStackGame';
 
 export interface GameCardInfo {
   id: GameId;
@@ -45,6 +47,26 @@ export const gameCards: GameCardInfo[] = [
     color: 'lilac',
     tag: '高度挑战',
   },
+  {
+    id: 'shells',
+    title: '贝壳消消乐',
+    subtitle: '排成三枚，听海浪叮咚',
+    description: '交换贝壳、泡泡和珊瑚连成三枚；四连会留下能清除整行整列的星星贝壳。',
+    controls: '点击交换 / 方向键 + 空格',
+    icon: '🐚',
+    color: 'aqua',
+    tag: '轻松益智',
+  },
+  {
+    id: 'stacker',
+    title: '云朵叠叠乐',
+    subtitle: '对齐一朵云，搭起天空小屋',
+    description: '看准时机放下左右移动的云砖，留下重叠部分。连续完美落点能补宽云塔，向着暮色和星空继续攀高。',
+    controls: '点击 / 空格放下',
+    icon: '☁️',
+    color: 'sky',
+    tag: '一键叠高',
+  },
 ];
 
 export function createGame(id: GameId): MiniGame {
@@ -52,5 +74,7 @@ export function createGame(id: GameId): MiniGame {
     case 'fishing': return new FishingGame();
     case 'dodger': return new DodgerGame();
     case 'jumper': return new JumperGame();
+    case 'shells': return new ShellMatchGame();
+    case 'stacker': return new CloudStackGame();
   }
 }

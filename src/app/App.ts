@@ -4,12 +4,17 @@ import { audio } from '../core/Audio';
 import { HEIGHT, WIDTH, type GameControls, type GameId, type MiniGame } from '../core/Game';
 import { exportSaveBackup, getBest, importSaveBackup, saveBest } from '../core/Storage';
 import { createGame, gameCards } from '../games';
+import { SHELL_SCORE_STAR_THRESHOLDS } from '../games/shells/ShellMatchGame';
 import { chooseAquariumDecoration, chooseCatAccessory, favoriteFishLimit, fishSpecies, fishingZones, getDailyFishingEvent, getDailyFishingSighting, getDailyFishingWeather, getFavoriteFishIds, getTrackedFish, getFishingDailyQuest, getFishingRodStats, getFishBestLengths, getFishCounts, getFishFriendship, getFishLengthRange, getFishSizeLabel, getFishTrophyRanks, savePreferredZone, toggleFavoriteFish, toggleTrackedFish, upgradeFishingRod, type FishingZoneId } from '../games/fishing/FishJournal';
 import { renderHome } from '../ui/HomeScreen';
 import { createFishCollectionCard } from '../ui/CollectionCard';
 import { renderSoundToggle, syncSoundToggle } from '../ui/SoundToggle';
 
 type AppState = 'home' | 'ready' | 'playing' | 'paused' | 'ended';
+
+function setTextIfChanged(element: Element | null | undefined, value: string): void {
+  if (element && element.textContent !== value) element.textContent = value;
+}
 
 function saveCollectionCard(
   blob: Blob,
@@ -38,10 +43,12 @@ export class App {
   private pointerX: number | null = null;
   private pointerSteering = false;
   private bestScore = 0;
+  private bestScoreAtRunStart = 0;
   private fishingQuestCompletedAtRunStart = false;
   private keyDownHandler: ((event: KeyboardEvent) => void) | null = null;
   private keyUpHandler: ((event: KeyboardEvent) => void) | null = null;
   private visibilityHandler: (() => void) | null = null;
+  private fullscreenChangeHandler: (() => void) | null = null;
 
   constructor(private readonly root: HTMLElement) {
     this.showHome();
@@ -293,16 +300,18 @@ export class App {
   }
 
   private gameMarkup(title: string, icon: string, controls: string): string {
+    const directional = this.game?.id === 'dodger' || this.game?.id === 'jumper';
     return '<div class="play-page"><header class="play-header">' +
       '<button class="back-button" id="back-button" aria-label="返回游戏大厅"><span>←</span><span class="back-label">游戏大厅</span></button>' +
       '<a class="brand compact-brand" href="#" aria-label="口袋游乐场"><span class="brand-mark"><span></span><span></span><span></span><span></span></span><span class="brand-name">口袋游乐场<small>POCKET PLAY</small></span></a>' +
-      '<div class="play-actions">' + renderSoundToggle() + '<button class="pause-button" id="pause-button" aria-label="暂停游戏">Ⅱ <span>暂停</span></button></div></header>' +
+      '<div class="play-actions">' + renderSoundToggle() + '<button class="pause-button" id="pause-button" aria-label="暂停游戏">Ⅱ <span>暂停</span></button><button class="fullscreen-button" id="fullscreen-button" type="button" aria-label="进入全屏" aria-pressed="false">⛶ <span>全屏</span></button></div></header>' +
       '<main class="play-main"><div class="game-heading"><div class="game-heading-icon">' + icon + '</div><div><span class="game-eyebrow">NOW PLAYING</span><h1>' + title + '</h1></div><div class="heading-decoration">✦</div></div>' +
       '<section class="game-panel"><div class="hud"><div class="hud-item"><span class="hud-label">得分</span><strong id="score-value">0</strong></div><div class="hud-item"><span class="hud-label">剩余时间</span><strong id="time-value">—</strong></div><div class="hud-item hud-status"><span class="hud-label">状态</span><strong id="status-value">准备中</strong></div><div class="hud-item hud-best"><span class="hud-label">个人最佳</span><strong id="best-value">' + this.bestScore + '</strong></div></div>' +
-      '<div class="canvas-wrap"><canvas id="game-canvas" width="960" height="540" aria-label="' + title + '游戏区域"></canvas>' +
+      '<div class="canvas-wrap"><canvas id="game-canvas" width="960" height="540" tabindex="0" aria-label="' + title + '游戏区域"></canvas>' +
       '<div class="game-overlay" id="game-overlay"><div class="overlay-card"><span class="overlay-kicker">POCKET PLAY</span><h2 id="overlay-title"></h2><p id="overlay-description"></p><div class="result-next-step" id="result-next-step" hidden><p id="result-next-step-copy" aria-live="polite"></p><button class="result-next-action" id="result-next-action" type="button"></button></div><div class="setup-picker" id="setup-picker"></div><button class="primary-button" id="overlay-action"></button><button class="text-button" id="overlay-secondary">回到游戏大厅</button></div></div></div></section>' +
-      '<div class="play-bottom"><div class="control-hint"><span class="hint-icon">⌨</span><span>' + controls + '</span><span class="hint-divider">·</span><span>Esc 返回大厅</span></div>' +
-      '<div class="touch-controls" aria-label="触屏方向控制"><button type="button" data-key="left" aria-label="向左">←</button><button type="button" data-key="right" aria-label="向右">→</button></div>' +
+      '<div class="play-bottom"><div class="control-hint"><span class="hint-icon">⌨</span><span>' + controls + '</span><span class="hint-divider">·</span><span>Esc 退出全屏 / 返回大厅</span></div>' +
+      (directional ? '<div class="touch-controls" aria-label="触屏方向控制"><button type="button" data-key="left" aria-label="向左">←</button><button type="button" data-key="right" aria-label="向右">→</button></div>' : '') +
+      (this.game?.id === 'stacker' ? '<button type="button" class="game-tap-action" id="game-tap-action" disabled>放下云朵</button>' : '') +
       '<div class="bottom-tip"><span class="tip-star">✦</span> 玩得开心就好</div></div></main></div>';
   }
 
@@ -310,6 +319,16 @@ export class App {
     this.bindSoundToggle();
     this.root.querySelector('#back-button')?.addEventListener('click', () => this.showHome());
     this.root.querySelector('#pause-button')?.addEventListener('click', () => this.togglePause());
+    this.root.querySelector('#game-tap-action')?.addEventListener('click', () => {
+      if (this.state === 'playing') this.game?.press?.();
+    });
+    this.root.querySelector('#fullscreen-button')?.addEventListener('click', () => { void this.toggleFullscreen(); });
+    this.fullscreenChangeHandler = () => {
+      const page = this.root.querySelector<HTMLElement>('.play-page');
+      if (!document.fullscreenElement && page?.classList.contains('is-immersive')) page.classList.remove('is-immersive');
+      this.syncFullscreenButton();
+    };
+    document.addEventListener('fullscreenchange', this.fullscreenChangeHandler);
     this.root.querySelector('#overlay-action')?.addEventListener('click', () => {
       if (this.state === 'ready') this.startGame();
       else if (this.state === 'paused') this.resumeGame();
@@ -363,15 +382,28 @@ export class App {
   private bindGameInput(canvas: HTMLCanvasElement): void {
     this.keyDownHandler = (event: KeyboardEvent): void => {
       const key = this.normalizeKey(event.key);
-      const onSetupOption = event.target instanceof Element && Boolean(event.target.closest('[data-setup-option]'));
-      if (onSetupOption && (key === 'space' || event.key === 'Enter')) return;
-      if (['left', 'right', 'space'].includes(key)) event.preventDefault();
+      const activationKey = key === 'space' || event.key === 'Enter';
+      if (activationKey && event.repeat) {
+        event.preventDefault();
+        return;
+      }
+      const focusedControl = event.target instanceof Element
+        ? event.target.closest('button, a, input, select, textarea, [contenteditable="true"]')
+        : null;
+      if (activationKey && focusedControl && !focusedControl.closest('.game-overlay.is-hidden')) return;
+      if (['left', 'right', 'up', 'down', 'space'].includes(key)) event.preventDefault();
       if (event.key === 'Escape') {
+        if (event.repeat) return;
+        const page = this.root.querySelector<HTMLElement>('.play-page');
+        if (page?.classList.contains('is-immersive') || document.fullscreenElement === page) {
+          void this.toggleFullscreen();
+          return;
+        }
         this.showHome();
         return;
       }
       if (key === 'pause' && (this.state === 'playing' || this.state === 'paused')) {
-        this.togglePause();
+        if (!event.repeat) this.togglePause();
         return;
       }
       if (this.state === 'ready' && (key === 'space' || event.key === 'Enter')) {
@@ -382,8 +414,8 @@ export class App {
         if (this.state === 'ended') this.restartGame(); else this.resumeGame();
         return;
       }
-      if (this.state === 'playing' && key === 'space') this.game?.press?.();
-      if (key === 'left' || key === 'right') this.keys.add(key);
+      if (this.state === 'playing' && key === 'space' && !event.repeat) this.game?.press?.();
+      if (key === 'left' || key === 'right' || key === 'up' || key === 'down') this.keys.add(key);
     };
     this.keyUpHandler = (event: KeyboardEvent): void => {
       this.keys.delete(this.normalizeKey(event.key));
@@ -398,6 +430,7 @@ export class App {
     canvas.addEventListener('pointerdown', (event) => {
       if (this.state !== 'playing' || !this.surface || !this.game) return;
       const point = this.surface.point(event.clientX, event.clientY);
+      if (point.x < 0 || point.x > WIDTH || point.y < 0 || point.y > HEIGHT) return;
       if (this.game.id === 'fishing') {
         this.game.press?.(point.x, point.y);
       } else {
@@ -424,7 +457,10 @@ export class App {
     if (!this.game || !this.surface) return;
     this.surface.resize();
     const ctx = this.surface.context;
-    ctx.clearRect(0, 0, WIDTH, HEIGHT);
+    ctx.save();
+    ctx.resetTransform();
+    ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+    ctx.restore();
     if (this.state === 'playing') {
       const controls: GameControls = {
         keys: this.keys,
@@ -438,17 +474,27 @@ export class App {
         this.showOverlay();
       }
     }
-    this.game.render(ctx, now);
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, 0, WIDTH, HEIGHT);
+    ctx.clip();
+    try {
+      this.game.render(ctx, now);
+    } finally {
+      ctx.restore();
+    }
     this.updateHud();
   }
 
   private startGame(): void {
+    this.bestScoreAtRunStart = this.bestScore;
     this.fishingQuestCompletedAtRunStart = this.game?.id === 'fishing' && getFishingDailyQuest().completed;
     this.game?.start();
     audio.play('start');
     this.state = 'playing';
     this.keys.clear();
     this.showOverlay();
+    this.root.querySelector<HTMLCanvasElement>('#game-canvas')?.focus({ preventScroll: true });
   }
 
   private restartGame(): void {
@@ -459,18 +505,52 @@ export class App {
     if (this.state !== 'playing') return;
     this.state = 'paused';
     this.keys.clear();
+    this.pointerSteering = false;
+    this.pointerX = null;
     this.showOverlay();
   }
 
   private resumeGame(): void {
     if (this.state !== 'paused') return;
     this.state = 'playing';
+    this.keys.clear();
     this.showOverlay();
+    this.root.querySelector<HTMLCanvasElement>('#game-canvas')?.focus({ preventScroll: true });
   }
 
   private togglePause(): void {
     if (this.state === 'playing') this.pauseGame();
     else if (this.state === 'paused') this.resumeGame();
+  }
+
+  private async toggleFullscreen(): Promise<void> {
+    const page = this.root.querySelector<HTMLElement>('.play-page');
+    if (!page) return;
+    const isImmersive = page.classList.contains('is-immersive') || document.fullscreenElement === page;
+    if (isImmersive) {
+      page.classList.remove('is-immersive');
+      if (document.fullscreenElement === page) {
+        try { await document.exitFullscreen(); } catch { /* CSS layout still returns to normal. */ }
+      }
+    } else {
+      page.classList.add('is-immersive');
+      try {
+        await page.requestFullscreen();
+      } catch {
+        // The viewport-filling layout remains available when the browser blocks Fullscreen API.
+      }
+    }
+    this.syncFullscreenButton();
+  }
+
+  private syncFullscreenButton(): void {
+    const page = this.root.querySelector<HTMLElement>('.play-page');
+    const button = this.root.querySelector<HTMLButtonElement>('#fullscreen-button');
+    if (!button) return;
+    const active = Boolean(page?.classList.contains('is-immersive') || document.fullscreenElement === page);
+    button.setAttribute('aria-pressed', String(active));
+    button.setAttribute('aria-label', active ? '退出全屏' : '进入全屏');
+    button.innerHTML = active ? '⛶ <span>退出全屏</span>' : '⛶ <span>全屏</span>';
   }
 
   private showOverlay(): void {
@@ -490,20 +570,6 @@ export class App {
     const fishingEvent = this.game.id === 'fishing' ? getDailyFishingEvent() : null;
     const trackedFish = this.game.id === 'fishing' ? getTrackedFish() : null;
     const rod = fishingQuest ? getFishingRodStats() : null;
-    const trackedFishZone = trackedFish ? fishingZones.find((zone) => zone.id === trackedFish.zoneId) : null;
-    const sightingCopy = fishingSighting
-      ? fishingSighting.completed
-        ? ' 今日鱼影「' + fishingSighting.fish.name + '」已完成。'
-        : ' 今日鱼影：「' + fishingSighting.fish.name + '」在' + fishingSighting.zone.label + '更容易遇见，首次钓到可得 ' + fishingSighting.reward + ' 枚贝壳。'
-      : '';
-    const eventCopy = fishingEvent
-      ? ' 今日海域奇遇：「' + fishingEvent.label + '」在' + fishingEvent.zone.label + '发生，' + fishingEvent.detail + '，期间还能遇见一条限定鱼。'
-      : '';
-    const trackedFishCopy = trackedFish
-      ? trackedFish.eventId && trackedFish.eventId !== fishingEvent?.id
-        ? ' 当前追踪目标「' + trackedFish.name + '」是奇遇限定鱼，等对应海域奇遇轮换时再去寻找。'
-        : ' 当前追踪目标「' + trackedFish.name + '」在' + (trackedFishZone?.label || '对应海域') + '出现机会提高。'
-      : '';
     const questCopy = fishingQuest
       ? fishingQuest.completed
         ? this.state === 'ended' && !this.fishingQuestCompletedAtRunStart
@@ -512,21 +578,44 @@ export class App {
         : ' 今日委托「' + fishingQuest.title + '」：' + fishingQuest.description + '（' + fishingQuest.progress + '/' + fishingQuest.target + '），完成可得 ' + fishingQuest.reward + ' 枚贝壳。'
       : '';
 
+    const shellStarCount = this.game.id === 'shells'
+      ? SHELL_SCORE_STAR_THRESHOLDS.filter((threshold) => this.game!.score >= threshold).length
+      : 0;
+    const shellNextStar = SHELL_SCORE_STAR_THRESHOLDS[shellStarCount];
+    const shellResultCopy = this.game?.id === 'shells'
+      ? (shellStarCount === 3
+          ? '潮池评级：★★★，三颗星都拿到啦！'
+          : '潮池评级：' + '★'.repeat(shellStarCount) + '☆'.repeat(3 - shellStarCount) + '，距离下一颗星还差 ' + Math.max(0, (shellNextStar || 0) - this.game.score) + ' 分。') +
+        (this.game.score > this.bestScoreAtRunStart ? ' 刷新个人最佳！' : ' 个人最佳 ' + this.bestScore + ' 分。')
+      : '';
     const copy: Record<Exclude<AppState, 'home'>, { title: string; body: string; action: string }> = {
       ready: {
         title: '准备好了吗？',
         body: this.game.id === 'fishing'
-          ? '观察浮标信号，咬钩后按提示收竿，再趁鱼线进入绿色区拉线三次。少失误能提升这条鱼的收线章，逐星获得贝壳。每种鱼尺寸不同，鱼越大尺寸加分越高；刷新最大鱼长还能再加分。每局会从平潮转入回游潮和星潮，20 秒、40 秒时偏好的鱼群会变化。今日' + weather.label + '：' + weather.detail + '。当前使用' + rod?.label + ' Lv.' + rod?.level + '，' + rod?.detail + '。' + trackedFishCopy + eventCopy + sightingCopy + questCopy
+          ? '点按或按空格收竿；看到绿色安全区时再拉线，连续成功三次即可钓上鱼。少失误能获得更高收线章，大鱼有机会刷新尺寸纪录。今日' + weather.label + '会影响鱼群或拉线节奏。' +
+            (rod ? '装备：' + rod.label + ' Lv.' + rod.level + '。' : '') +
+            (trackedFish ? '追踪：' + trackedFish.name + '。' : '') +
+            (fishingEvent ? '今日奇遇：' + fishingEvent.label + '。' : '') +
+            (fishingSighting ? '今日鱼影：' + fishingSighting.fish.name + ' · 首钓得 ' + fishingSighting.reward + ' 枚贝壳。' : '') +
+            (fishingQuest ? '每日委托：' + fishingQuest.title + '（' + fishingQuest.progress + '/' + fishingQuest.target + '）。' : '')
           : this.game.id === 'dodger'
             ? '左右移动躲开石头和路锥。连续贴边闪过会逐步加分，连续捡到星星也能叠加奖励；跑到 20 秒和 40 秒会进入新的路线。'
             : this.game.id === 'jumper'
               ? '开局先选路线：追星小径的星星平台更多但稍窄；弹簧巡游有更多弹簧、星星略少；稳步登高的平台更宽。左右移动帮猫猫踩稳平台，落地后自动弹起；提前判断横移与裂纹平台，连着踩中星星会叠加奖励。'
-              : '放轻松，跟着节奏玩就好。准备好后，按下按钮开始。',
+              : this.game.id === 'shells'
+                ? '交换横向或纵向相邻的贝壳、泡泡、珊瑚等物件，连成三个或更多即可消除。四连会留下星星贝壳，再次连到它时会清除整行和整列；连锁消除会叠加得分。'
+                : this.game.id === 'stacker'
+                  ? '云砖会左右移动，点击画面、点下方按钮或按空格放下。对齐塔顶才能留下重叠部分，偏出去的部分会掉落；连续完美落点能恢复一些宽度。先选喜欢的节奏，看看能把小屋搭多高。'
+                  : '放轻松，跟着节奏玩就好。准备好后，按下按钮开始。',
         action: '开始游戏',
       },
       playing: { title: '', body: '', action: '' },
       paused: { title: '休息一下', body: '游戏已经暂停，准备好后继续挑战。', action: '继续游戏' },
-      ended: { title: '这一局结束啦', body: this.game.outcome + ' · 本局得分 ' + this.game.score + questCopy, action: '再玩一次' },
+      ended: {
+        title: this.game.id === 'shells' && shellStarCount === 3 ? '潮池三星达成！' : '这一局结束啦',
+        body: this.game.outcome + ' · 本局得分 ' + this.game.score + (this.game.id === 'shells' ? '。' + shellResultCopy : questCopy),
+        action: '再玩一次',
+      },
     };
     const current = copy[this.state as Exclude<AppState, 'home'>];
     const nextStepCopy = fishingSighting && fishingQuest
@@ -561,6 +650,8 @@ export class App {
     overlay.classList.toggle('is-hidden', this.state === 'playing');
     secondary.textContent = this.state === 'ended' ? '选另一款游戏' : '回到游戏大厅';
     pause.disabled = this.state === 'ready' || this.state === 'ended';
+    const tapAction = this.root.querySelector<HTMLButtonElement>('#game-tap-action');
+    if (tapAction) tapAction.disabled = this.state !== 'playing';
     pause.classList.toggle('is-resume', this.state === 'paused');
     pause.innerHTML = this.state === 'paused' ? '▶ <span>继续</span>' : 'Ⅱ <span>暂停</span>';
   }
@@ -600,27 +691,32 @@ export class App {
     const timeLabel = time?.previousElementSibling;
     const status = this.root.querySelector<HTMLElement>('#status-value');
     const best = this.root.querySelector<HTMLElement>('#best-value');
-    if (score) score.textContent = String(this.game.score);
+    setTextIfChanged(score, String(this.game.score));
     if (this.game.timeLeft === undefined) {
-      if (timeLabel) timeLabel.textContent = '模式';
-      if (time) time.textContent = '无尽';
+      setTextIfChanged(timeLabel, '模式');
+      setTextIfChanged(time, '无尽');
     } else {
-      if (timeLabel) timeLabel.textContent = '剩余时间';
-      if (time) time.textContent = Math.ceil(this.game.timeLeft) + 's';
+      setTextIfChanged(timeLabel, '剩余时间');
+      setTextIfChanged(time, Math.ceil(this.game.timeLeft) + 's');
     }
-    if (status) status.textContent = this.game.statusText;
-    if (best) best.textContent = String(this.bestScore);
+    setTextIfChanged(status, this.game.statusText);
+    setTextIfChanged(best, String(this.bestScore));
   }
 
   private normalizeKey(key: string): string {
     if (key === 'ArrowLeft' || key.toLowerCase() === 'a') return 'left';
     if (key === 'ArrowRight' || key.toLowerCase() === 'd') return 'right';
+    if (key === 'ArrowUp' || key.toLowerCase() === 'w') return 'up';
+    if (key === 'ArrowDown' || key.toLowerCase() === 's') return 'down';
     if (key === ' ' || key === 'Spacebar') return 'space';
     if (key.toLowerCase() === 'p') return 'pause';
     return key;
   }
 
   private disposeGame(): void {
+    const page = this.root.querySelector<HTMLElement>('.play-page');
+    page?.classList.remove('is-immersive');
+    if (document.fullscreenElement === page) void document.exitFullscreen().catch(() => undefined);
     this.loop?.stop();
     this.loop = null;
     this.surface?.dispose();
@@ -633,8 +729,10 @@ export class App {
     if (this.keyDownHandler) window.removeEventListener('keydown', this.keyDownHandler);
     if (this.keyUpHandler) window.removeEventListener('keyup', this.keyUpHandler);
     if (this.visibilityHandler) document.removeEventListener('visibilitychange', this.visibilityHandler);
+    if (this.fullscreenChangeHandler) document.removeEventListener('fullscreenchange', this.fullscreenChangeHandler);
     this.keyDownHandler = null;
     this.keyUpHandler = null;
     this.visibilityHandler = null;
+    this.fullscreenChangeHandler = null;
   }
 }

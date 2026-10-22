@@ -1,7 +1,7 @@
 import { clamp, drawText, HEIGHT, roundedRect, WIDTH } from '../../core/Game';
 import { audio } from '../../core/Audio';
 import type { GameControls, GameSetupOption, MiniGame } from '../../core/Game';
-import { fishSpecies, fishingBaits, fishingZones, getDailyFishingEvent, getDailyFishingSighting, getDailyFishingWeather, getFishingDailyQuest, getFishingRodStats, getFishCounts, getFishFriendship, getFishJournalSummary, getFishTrophyRanks, getFishingBaitOptions, getFishingZoneOptions, getPreferredBait, getPreferredZone, getSelectedCatAccessory, getTrackedFish, recordFishCatch, rollFishLengthCm, savePreferredBait, savePreferredZone, type BaitId, type CatAccessoryId, type FishSpecies, type FishingBait, type FishingDailyEvent, type FishingWeather, type FishingZoneId } from './FishJournal';
+import { fishSpecies, fishingBaits, fishingZones, getDailyFishingEvent, getDailyFishingSighting, getDailyFishingWeather, getFishingDayPhase, getFishingDailyQuest, getFishingRodStats, getFishCounts, getFishFriendship, getFishJournalSummary, getFishTrophyRanks, getFishingBaitOptions, getFishingZoneOptions, getPreferredBait, getPreferredZone, getSelectedCatAccessory, getTrackedFish, recordFishCatch, rollFishLengthCm, savePreferredBait, savePreferredZone, type BaitId, type CatAccessoryId, type FishSpecies, type FishingBait, type FishingDailyEvent, type FishingDayPhase, type FishingWeather, type FishingZoneId } from './FishJournal';
 
 type FishingPhase = 'waiting' | 'bite' | 'reeling' | 'fake';
 const catchFeedbackDuration = 1.2;
@@ -64,6 +64,13 @@ export class FishingGame implements MiniGame {
   private lastCatchSizeLabel = '';
   private lastCatchSizeBonus = 0;
   private lastCatchFriendshipUpdate = '';
+  private shoreMomentAvailable = false;
+  private shoreMomentResolved = false;
+  private shoreMomentTimeLeft = 0;
+  private shoreMomentBoost = false;
+  private shoreMomentFocus: 'discovery' | 'trophy' | 'rare' = 'discovery';
+  private shoreMomentFishBoost = false;
+  private shoreMomentDownHeld = false;
   private trackedFish: FishSpecies | null = getTrackedFish();
   private trackedFishCatchCount = 0;
   private zoneUnlockFlash = 0;
@@ -78,6 +85,7 @@ export class FishingGame implements MiniGame {
   private baitId: BaitId = getPreferredBait();
   private zoneId: FishingZoneId = getPreferredZone();
   private readonly weather: FishingWeather = getDailyFishingWeather();
+  private dayPhase: FishingDayPhase = getFishingDayPhase();
   private readonly dailyEvent: FishingDailyEvent = getDailyFishingEvent();
   private readonly rod = getFishingRodStats();
   private readonly catAccessoryId: CatAccessoryId = getSelectedCatAccessory();
@@ -99,7 +107,7 @@ export class FishingGame implements MiniGame {
       icon: zone.icon,
       label: zone.label,
       detail: zone.unlocked
-        ? zone.detail + (zone.id === this.dailyEvent.zone.id ? ' · 今日奇遇：' + this.dailyEvent.label + '，' + this.dailyEvent.detail : '')
+        ? zone.detail + (zone.id === this.dailyEvent.zone.id ? ' · 今日奇遇：' + this.dailyEvent.label + '，' + this.dailyEvent.detail : '') + ' · ' + this.dayPhase.icon + this.dayPhase.label + '：' + this.dayPhase.detail
         : zone.unlockHint,
       unlocked: zone.unlocked,
       unlockHint: zone.unlockHint,
@@ -119,9 +127,13 @@ export class FishingGame implements MiniGame {
     const friendship = this.friendshipPointsEarned > 0 ? '，鱼友情升阶 +' + this.friendshipPointsEarned + ' 分' : '';
     const trackedCatch = this.trackedFishCatchCount > 0 ? '，追踪目标上岸 ' + this.trackedFishCatchCount + ' 条' : '';
     const event = this.zoneId === this.dailyEvent.zone.id ? '，遇上' + this.dailyEvent.label : '';
-    return '在' + this.getZoneLabel() + '遇上' + this.weather.label + event + '，使用' + this.getBaitLabel() + '钓到 ' + this.catches + ' 条鱼，新发现 ' + this.discoveries + ' 个鱼种，收线章 +' + this.trophyStarsEarned + ' 星' + trackedCatch + friendship + sizeRecords + sighting + milestones;
+    return '在' + this.getZoneLabel() + '遇上' + this.dayPhase.label + '、' + this.weather.label + event + '，使用' + this.getBaitLabel() + '钓到 ' + this.catches + ' 条鱼，新发现 ' + this.discoveries + ' 个鱼种，收线章 +' + this.trophyStarsEarned + ' 星' + trackedCatch + friendship + sizeRecords + sighting + milestones;
   }
-  get statusText(): string { return this.chain > 1 ? '连击 x' + this.chain : '收获 ' + this.catches + ' 条'; }
+  get statusText(): string {
+    if (this.isShoreMomentVisible()) return '岸边微光 · 可回应';
+    if (this.shoreMomentBoost) return '微光引鱼中';
+    return this.chain > 1 ? '连击 x' + this.chain : '收获 ' + this.catches + ' 条';
+  }
 
   selectSetupOption(id: string): void {
     const bait = getFishingBaitOptions().find((option) => option.id === id && option.unlocked);
@@ -137,6 +149,7 @@ export class FishingGame implements MiniGame {
   }
 
   start(): void {
+    this.dayPhase = getFishingDayPhase();
     this.elapsed = 0;
     this.phase = 'waiting';
     this.phaseTimer = 1.5;
@@ -174,13 +187,20 @@ export class FishingGame implements MiniGame {
     this.lastCatchSizeLabel = '';
     this.lastCatchSizeBonus = 0;
     this.lastCatchFriendshipUpdate = '';
+    this.shoreMomentAvailable = false;
+    this.shoreMomentResolved = false;
+    this.shoreMomentTimeLeft = 0;
+    this.shoreMomentBoost = false;
+    this.shoreMomentFocus = 'discovery';
+    this.shoreMomentFishBoost = false;
+    this.shoreMomentDownHeld = false;
     this.trackedFish = getTrackedFish();
     this.trackedFishCatchCount = 0;
     this.ended = false;
     this.message = '鱼竿准备好了，等鱼上钩';
   }
 
-  update(dt: number, _controls: GameControls): void {
+  update(dt: number, controls: GameControls): void {
     if (this.ended) return;
     this.elapsed += dt;
     const nextTideStage = this.getTideStage();
@@ -204,6 +224,7 @@ export class FishingGame implements MiniGame {
       }
     }
 
+    this.updateShoreMoment(dt, controls);
     this.phaseTimer -= dt;
     if (this.phase === 'reeling') {
       this.reelElapsed += dt;
@@ -222,7 +243,8 @@ export class FishingGame implements MiniGame {
     }
 
     if (this.phase === 'waiting' && this.phaseTimer <= 0) {
-      this.phase = Math.random() < 0.25 ? 'fake' : 'bite';
+      const fakeBiteChance = this.weather.id === 'drizzle' ? 0.12 : 0.25;
+      this.phase = Math.random() < fakeBiteChance ? 'fake' : 'bite';
       if (this.phase === 'fake') {
         this.currentFish = null;
         this.biteWindowMax = 0;
@@ -233,7 +255,9 @@ export class FishingGame implements MiniGame {
         this.phaseTimer = this.biteWindowMax;
       }
       audio.play(this.phase === 'fake' ? 'fake' : 'bite');
-      this.message = this.phase === 'fake' ? '好像动了一下？' : this.getBiteMessage(this.currentFish);
+      this.message = this.phase === 'fake'
+        ? '好像动了一下？'
+        : this.getBiteMessage(this.currentFish) + (this.shoreMomentFishBoost ? ' · 水花引来' : '');
     } else if (this.phase !== 'waiting' && this.phaseTimer <= 0) {
       if (this.phase === 'bite') {
         this.chain = 0;
@@ -246,8 +270,12 @@ export class FishingGame implements MiniGame {
     }
   }
 
-  press(): void {
+  press(x?: number, y?: number): void {
     if (this.ended) return;
+    if (x !== undefined && y !== undefined && this.isShoreMomentHit(x, y)) {
+      this.activateShoreMoment();
+      return;
+    }
     if (this.phase === 'bite') {
       this.beginReeling();
     } else if (this.phase === 'reeling') {
@@ -267,14 +295,17 @@ export class FishingGame implements MiniGame {
     const palette = zonePalettes[this.zoneId];
     const hudColor = this.zoneId === 'moon' || this.zoneId === 'aurora' ? '#fff1c9' : '#315d61';
     const hudMuted = this.zoneId === 'moon' || this.zoneId === 'aurora' ? '#d2def4' : '#52797b';
+    const waterline = this.getWaterlineY();
+    const tideOffset = waterline - 292;
     const sky = ctx.createLinearGradient(0, 0, 0, HEIGHT);
     sky.addColorStop(0, palette.skyTop);
-    sky.addColorStop(0.53, palette.skyMid);
-    sky.addColorStop(0.54, palette.waterTop);
+    sky.addColorStop(Math.max(0, waterline / HEIGHT - 0.012), palette.skyMid);
+    sky.addColorStop(waterline / HEIGHT, palette.waterTop);
     sky.addColorStop(1, palette.waterBottom);
     ctx.fillStyle = sky;
     ctx.fillRect(0, 0, WIDTH, HEIGHT);
 
+    this.drawDayPhaseEffect(ctx, now, waterline);
     this.drawZoneDecor(ctx, now);
 
     ctx.fillStyle = palette.far;
@@ -291,10 +322,11 @@ export class FishingGame implements MiniGame {
     this.drawZoneWaterDecor(ctx, now);
     this.drawDailyEventEffect(ctx, now);
     this.drawWeatherEffect(ctx, now);
+    this.drawShoreMoment(ctx);
 
     for (let i = 0; i < 7; i += 1) {
       const x = (i * 163 + now * (10 + i) % 110) % 1000;
-      const y = 350 + (i % 3) * 57 + Math.sin(now * 1.4 + i) * 5;
+      const y = 350 + (i % 3) * 57 + tideOffset + Math.sin(now * 1.4 + i) * 5;
       ctx.strokeStyle = palette.ripple;
       ctx.lineWidth = 3;
       ctx.beginPath();
@@ -330,10 +362,10 @@ export class FishingGame implements MiniGame {
     const biteMotion = this.phase === 'bite' ? this.getBiteMotion(this.currentFish) : { amplitude: 8, frequency: 35 };
     const bobX = 505;
     const bobY = this.phase === 'bite'
-      ? 337 + Math.sin(now * biteMotion.frequency) * biteMotion.amplitude + (1 - biteRatio) * 10
+      ? 337 + tideOffset + Math.sin(now * biteMotion.frequency) * biteMotion.amplitude + (1 - biteRatio) * 10
       : this.phase === 'fake'
-        ? 337 + Math.sin(now * 29) * 5
-        : 340 + Math.sin(now * 2.2) * 4;
+        ? 337 + tideOffset + Math.sin(now * 29) * 5
+        : 340 + tideOffset + Math.sin(now * 2.2) * 4;
     if (this.phase === 'bite' && this.currentFish && (this.currentFish.rarity === '稀有' || this.currentFish.rarity === '传说')) {
       ctx.strokeStyle = this.currentFish.rarity === '传说' ? 'rgba(255,239,157,.72)' : 'rgba(186,151,255,.64)';
       ctx.lineWidth = 2;
@@ -401,8 +433,8 @@ export class FishingGame implements MiniGame {
     });
     drawText(ctx, this.phase === 'reeling' ? '看准绿色区再拉线' : '点一下或按空格收竿', 690, 250, 14, hudMuted, 600);
     drawText(ctx, '本局鱼饵：' + this.getBaitLabel(), 690, 280, 14, hudMuted, 700);
-    drawText(ctx, '今日天气：' + this.weather.icon + ' ' + this.weather.label, 690, 310, 14, hudMuted, 700);
-    drawText(ctx, '本局潮汐：' + ['平潮 · 常见鱼更活跃', '回游潮 · 少见鱼更活跃', '星潮 · 稀有鱼更活跃'][this.tideStage], 690, 338, 13, this.tideFlash > 0 ? '#f3d488' : hudMuted, 800);
+    drawText(ctx, '天气：' + this.weather.icon + ' ' + this.weather.label + ' · ' + this.getWeatherHint(), 690, 310, 12, hudMuted, 700);
+    drawText(ctx, '潮汐：' + ['平潮', '回游潮', '星潮'][this.tideStage] + ' · ' + this.dayPhase.icon + this.dayPhase.label + ' · ' + this.dayPhase.detail, 690, 338, 12, this.tideFlash > 0 ? '#f3d488' : hudMuted, 800);
     const isReeling = Boolean(this.currentFish && (this.phase === 'bite' || this.phase === 'reeling'));
     const lineOffset = isReeling ? 22 : 0;
     drawText(ctx, '今日奇遇 · ' + this.dailyEvent.icon + ' ' + this.dailyEvent.label + (this.zoneId === this.dailyEvent.zone.id ? '（已生效）' : ' · ' + this.dailyEvent.zone.label), 690, 362 + lineOffset, 12, hudMuted, 700);
@@ -439,36 +471,50 @@ export class FishingGame implements MiniGame {
     drawText(ctx, '鱼图鉴 ' + this.journalDiscovered + '/' + fishSpecies.length + ' · 本局新发现 ' + this.discoveries + ' 种', 480, 474, 14, '#fff8df', 700);
   }
 
+  private getAvailableFish(): FishSpecies[] {
+    return fishSpecies.filter((fish) => fish.zoneId === this.zoneId && (!fish.eventId || fish.eventId === this.dailyEvent.id));
+  }
+
   private pickFish(): FishSpecies {
-    const availableFish = fishSpecies.filter((fish) => fish.zoneId === this.zoneId && (!fish.eventId || fish.eventId === this.dailyEvent.id));
+    const availableFish = this.getAvailableFish();
     const sightingFish = availableFish.find((fish) => fish.id === this.dailySightingFishId);
     if (!this.dailySightingCompleted && sightingFish) {
       this.sightingBitesSinceLast += 1;
       if (this.sightingBitesSinceLast >= 5) {
         this.sightingBitesSinceLast = 0;
+        this.consumeShoreMomentBoost();
         return sightingFish;
       }
     }
-    const needsCatchCounts = this.baitId === 'echo' || (this.zoneId === this.dailyEvent.zone.id && this.dailyEvent.effect === 'undiscovered');
+    const needsCatchCounts = this.baitId === 'echo' || this.weather.id === 'mist' || this.dayPhase.id === 'dawn' || this.shoreMomentBoost || (this.zoneId === this.dailyEvent.zone.id && this.dailyEvent.effect === 'undiscovered');
     const catchCounts = needsCatchCounts ? getFishCounts() : undefined;
-    const trophyRanks = this.baitId === 'echo' ? getFishTrophyRanks() : undefined;
+    const trophyRanks = this.baitId === 'echo' || this.shoreMomentBoost ? getFishTrophyRanks() : undefined;
     const totalWeight = availableFish.reduce((sum, fish) => sum + this.getFishWeight(fish, catchCounts, trophyRanks), 0);
     let roll = Math.random() * totalWeight;
     for (const fish of availableFish) {
       roll -= this.getFishWeight(fish, catchCounts, trophyRanks);
       if (roll < 0) {
         if (fish.id === this.dailySightingFishId) this.sightingBitesSinceLast = 0;
+        this.consumeShoreMomentBoost();
         return fish;
       }
     }
     const fallback = availableFish[0] || fishSpecies[0];
     if (fallback.id === this.dailySightingFishId) this.sightingBitesSinceLast = 0;
+    this.consumeShoreMomentBoost();
     return fallback;
   }
 
   private getFishWeight(fish: FishSpecies, catchCounts?: Record<string, number>, trophyRanks?: Record<string, number>): number {
     let weight = fish.weight;
-    if (this.baitId === 'glow') {
+    if (this.baitId === 'cloud') {
+      if (fish.rarity === '常见') weight *= 1.28;
+      else if (fish.rarity === '稀有' || fish.rarity === '传说') weight *= 0.78;
+    } else if (this.baitId === 'starlight') {
+      if (fish.rarity === '传说') weight *= 3;
+      else if (fish.rarity === '稀有') weight *= 1.16;
+      else if (fish.rarity === '常见') weight *= 0.62;
+    } else if (this.baitId === 'glow') {
       if (fish.rarity === '稀有') weight *= 2;
       else if (fish.rarity === '传说') weight *= 2.2;
       else if (fish.rarity === '常见') weight *= 0.72;
@@ -487,6 +533,17 @@ export class FishingGame implements MiniGame {
     if (this.weather.id === 'sunny' && fish.rarity === '常见') weight *= 1.3;
     if (this.weather.id === 'drizzle' && fish.rarity === '少见') weight *= 1.3;
     if (this.weather.id === 'moon-tide' && (fish.rarity === '稀有' || fish.rarity === '传说')) weight *= 1.3;
+    if (this.weather.id === 'breeze' && fish.pullStyle === 'dart') weight *= 1.35;
+    if (this.weather.id === 'mist' && !catchCounts?.[fish.id]) weight *= 1.5;
+    if (this.shoreMomentBoost) {
+      if (this.shoreMomentFocus === 'discovery' && !catchCounts?.[fish.id]) weight *= 1.8;
+      else if (this.shoreMomentFocus === 'trophy' && (trophyRanks?.[fish.id] || 0) < 3) weight *= 1.45;
+      else if (this.shoreMomentFocus === 'rare' && (fish.rarity === '稀有' || fish.rarity === '传说')) weight *= 1.25;
+    }
+    if (this.dayPhase.id === 'dawn' && !catchCounts?.[fish.id]) weight *= 1.2;
+    if (this.dayPhase.id === 'day' && fish.rarity === '常见') weight *= 1.16;
+    if (this.dayPhase.id === 'sunset' && fish.rarity === '稀有') weight *= 1.2;
+    if (this.dayPhase.id === 'night' && fish.rarity === '传说') weight *= 1.22;
     if (this.tideStage === 0 && fish.rarity === '常见') weight *= 1.12;
     if (this.tideStage === 1 && fish.rarity === '少见') weight *= 1.18;
     if (this.tideStage === 2 && (fish.rarity === '稀有' || fish.rarity === '传说')) weight *= 1.25;
@@ -504,13 +561,163 @@ export class FishingGame implements MiniGame {
     return this.elapsed >= 40 ? 2 : this.elapsed >= 20 ? 1 : 0;
   }
 
+  private getWaterlineY(): number {
+    return 292 - this.tideStage * 7;
+  }
+
+  private getWeatherHint(): string {
+    switch (this.weather.id) {
+      case 'sunny': return '常见鱼更靠岸，提示更久';
+      case 'drizzle': return '少见鱼更多，假动作更少';
+      case 'moon-tide': return '稀有鱼更多，星潮时线更急';
+      case 'breeze': return '变速鱼更多，拉线更急';
+      case 'mist': return '新鱼更易出现，提示更久';
+    }
+  }
+
+  private drawDayPhaseEffect(ctx: CanvasRenderingContext2D, now: number, waterline: number): void {
+    ctx.save();
+    if (this.dayPhase.id === 'dawn' || this.dayPhase.id === 'sunset') {
+      const color = this.dayPhase.id === 'dawn' ? '255,204,145' : '255,132,112';
+      const glow = ctx.createRadialGradient(660, waterline - 35, 8, 660, waterline - 35, 330);
+      glow.addColorStop(0, 'rgba(' + color + ',.25)');
+      glow.addColorStop(1, 'rgba(' + color + ',0)');
+      ctx.fillStyle = glow;
+      ctx.fillRect(280, 0, 680, waterline);
+      ctx.globalAlpha = 0.55;
+      ctx.fillStyle = this.dayPhase.id === 'dawn' ? '#ffe6b4' : '#ffb39a';
+      ctx.beginPath();
+      ctx.ellipse(660, waterline - 15, 76, 10, 0, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (this.dayPhase.id === 'day') {
+      const daylight = ctx.createRadialGradient(750, 42, 12, 750, 42, 320);
+      daylight.addColorStop(0, 'rgba(255,250,221,.18)');
+      daylight.addColorStop(1, 'rgba(255,250,221,0)');
+      ctx.fillStyle = daylight;
+      ctx.fillRect(400, 0, 560, waterline);
+    } else if (this.dayPhase.id === 'night') {
+      ctx.fillStyle = 'rgba(19,35,77,.12)';
+      ctx.fillRect(0, 0, WIDTH, waterline);
+      for (let index = 0; index < 18; index += 1) {
+        const x = 42 + (index * 149) % 875;
+        const y = 28 + (index * 67) % Math.max(80, waterline - 115);
+        ctx.globalAlpha = 0.3 + (Math.sin(now * 1.6 + index) + 1) * 0.2;
+        ctx.fillStyle = '#fff3c2';
+        ctx.beginPath();
+        ctx.arc(x, y, index % 5 === 0 ? 2 : 1.2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    ctx.restore();
+  }
+
+  private getShoreMomentLabel(): string {
+    switch (this.zoneId) {
+      case 'lake': return '湖边萤火';
+      case 'reef': return '珍珠气泡';
+      case 'moon': return '星屑水花';
+      case 'aurora': return '极光冰纹';
+    }
+  }
+
+  private getShoreMomentColor(): string {
+    switch (this.zoneId) {
+      case 'lake': return '#fff0a8';
+      case 'reef': return '#ffd9bd';
+      case 'moon': return '#ddceff';
+      case 'aurora': return '#b9ffed';
+    }
+  }
+
+  private updateShoreMoment(dt: number, controls: GameControls): void {
+    const downHeld = controls.keys.has('down');
+    const canShow = this.phase === 'waiting' && this.catchFlash <= 0 && this.elapsed < 60;
+    if (!this.shoreMomentResolved && this.elapsed >= 12 && canShow) {
+      this.shoreMomentAvailable = true;
+      this.shoreMomentResolved = true;
+      this.shoreMomentTimeLeft = 7;
+      this.message = this.getShoreMomentLabel() + '出现了，点一下回应（也可按 ↓）';
+    } else if (this.isShoreMomentVisible()) {
+      // Only spend the response window while waiting; a bite or catch animation takes priority.
+      const visibleTime = Math.min(dt, Math.max(0, this.phaseTimer));
+      this.shoreMomentTimeLeft = Math.max(0, this.shoreMomentTimeLeft - visibleTime);
+      if (this.shoreMomentTimeLeft <= 0) {
+        this.shoreMomentAvailable = false;
+        this.message = '水花散开啦，继续等浮标';
+      }
+    }
+    if (this.isShoreMomentVisible() && downHeld && !this.shoreMomentDownHeld) this.activateShoreMoment();
+    this.shoreMomentDownHeld = downHeld;
+  }
+
+  private isShoreMomentVisible(): boolean {
+    return this.shoreMomentAvailable && this.phase === 'waiting' && this.catchFlash <= 0 && !this.ended && this.elapsed < 60;
+  }
+
+  private getShoreMomentPoint(): { x: number; y: number } {
+    return { x: 390, y: 324 + (this.getWaterlineY() - 292) + Math.sin(this.elapsed * 3) * 3 };
+  }
+
+  private isShoreMomentHit(x: number, y: number): boolean {
+    if (!this.isShoreMomentVisible()) return false;
+    const point = this.getShoreMomentPoint();
+    return Math.hypot(x - point.x, y - point.y) <= 34
+      || (Math.abs(x - point.x) <= 132 && y >= point.y + 24 && y <= point.y + 54);
+  }
+
+  private activateShoreMoment(): void {
+    if (!this.isShoreMomentVisible()) return;
+    const availableFish = this.getAvailableFish();
+    const counts = getFishCounts();
+    const trophies = getFishTrophyRanks();
+    this.shoreMomentFocus = availableFish.some((fish) => !counts[fish.id])
+      ? 'discovery'
+      : availableFish.some((fish) => (trophies[fish.id] || 0) < 3) ? 'trophy' : 'rare';
+    this.shoreMomentAvailable = false;
+    this.shoreMomentBoost = true;
+    const hint = this.shoreMomentFocus === 'discovery' ? '带来新发现' : this.shoreMomentFocus === 'trophy' ? '遇见未满三星的鱼' : '遇见稀有鱼';
+    this.message = this.getShoreMomentLabel() + '回应了你！下一次鱼影更容易' + hint;
+  }
+
+  private consumeShoreMomentBoost(): void {
+    this.shoreMomentFishBoost = this.shoreMomentBoost;
+    this.shoreMomentBoost = false;
+  }
+
+  private drawShoreMoment(ctx: CanvasRenderingContext2D): void {
+    if (!this.isShoreMomentVisible()) return;
+    const point = this.getShoreMomentPoint();
+    const color = this.getShoreMomentColor();
+    const pulse = (Math.sin(this.elapsed * 5) + 1) * 0.5;
+    ctx.save();
+    ctx.globalAlpha = 0.22 + pulse * 0.18;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.ellipse(point.x, point.y + 6, 15 + pulse * 8, 4 + pulse * 2, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.globalAlpha = 0.5 + pulse * 0.35;
+    drawText(ctx, this.zoneId === 'reef' ? '◉' : '✦', point.x, point.y, 22 + pulse * 4, color, 900);
+    ctx.globalAlpha = 0.9;
+    ctx.beginPath();
+    ctx.arc(point.x, point.y, 29, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * this.shoreMomentTimeLeft / 7);
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(31,61,77,.88)';
+    roundedRect(ctx, point.x - 132, point.y + 24, 264, 30, 15);
+    ctx.fill();
+    drawText(ctx, this.getShoreMomentLabel() + ' · 点击 / ↓ 回应', point.x, point.y + 39, 13, color, 800);
+    ctx.restore();
+  }
+
   private getBiteWindow(fish: FishSpecies): number {
     const eventBonus = this.zoneId === this.dailyEvent.zone.id && this.dailyEvent.effect === 'calm' ? 0.2 : 0;
+    const baitBonus = this.baitId === 'cloud' ? 0.18 : this.baitId === 'starlight' ? -0.12 : 0;
+    const weatherBonus = (this.weather.id === 'sunny' && fish.rarity === '常见') || this.weather.id === 'mist' ? 0.15 : 0;
     switch (fish.rarity) {
-      case '常见': return 1.15 + eventBonus;
-      case '少见': return 0.98 + eventBonus;
-      case '稀有': return 0.82 + eventBonus;
-      case '传说': return 0.68 + eventBonus;
+      case '常见': return Math.max(0.35, 1.15 + eventBonus + baitBonus + weatherBonus);
+      case '少见': return Math.max(0.35, 0.98 + eventBonus + baitBonus + weatherBonus);
+      case '稀有': return Math.max(0.35, 0.82 + eventBonus + baitBonus + weatherBonus);
+      case '传说': return Math.max(0.35, 0.68 + eventBonus + baitBonus + weatherBonus);
     }
   }
 
@@ -552,18 +759,21 @@ export class FishingGame implements MiniGame {
   }
 
   private getReelDuration(fish: FishSpecies): number {
+    const baitBonus = this.baitId === 'cloud' ? 1.5 : this.baitId === 'starlight' ? -1.5 : 0;
     switch (fish.rarity) {
-      case '常见': return 12 + this.rod.timeBonus;
-      case '少见': return 11 + this.rod.timeBonus;
-      case '稀有': return 10 + this.rod.timeBonus;
-      case '传说': return 9 + this.rod.timeBonus;
+      case '常见': return Math.max(5, 12 + this.rod.timeBonus + baitBonus);
+      case '少见': return Math.max(5, 11 + this.rod.timeBonus + baitBonus);
+      case '稀有': return Math.max(5, 10 + this.rod.timeBonus + baitBonus);
+      case '传说': return Math.max(5, 9 + this.rod.timeBonus + baitBonus);
     }
   }
 
   private getReelTension(): number {
     const fish = this.currentFish;
     const speed = fish?.pullSpeed ?? 1.78;
-    const time = this.reelElapsed * speed;
+    const weatherSpeed = this.weather.id === 'breeze' ? 1.15 : 1;
+    const tideSpeed = this.weather.id === 'moon-tide' && this.tideStage === 2 ? 1.1 : 1;
+    const time = this.reelElapsed * speed * weatherSpeed * tideSpeed;
     const offset = this.reelPhaseOffset;
     const mainPull = Math.sin(time + offset) * (fish?.pullAmplitude ?? 0.31);
     const afterPull = Math.sin(time * (fish?.secondarySpeed ?? 0.47) + offset * 0.6) * (fish?.secondaryAmplitude ?? 0.04);
@@ -680,8 +890,9 @@ export class FishingGame implements MiniGame {
     const width = 380;
     const height = 20;
     const calmEventBonus = this.zoneId === this.dailyEvent.zone.id && this.dailyEvent.effect === 'calm' ? 0.025 : 0;
-    const goodStart = this.rod.safeStart - calmEventBonus;
-    const goodEnd = this.rod.safeEnd + calmEventBonus;
+    const baitZoneBonus = this.baitId === 'cloud' ? 0.02 : 0;
+    const goodStart = this.rod.safeStart - calmEventBonus - baitZoneBonus;
+    const goodEnd = this.rod.safeEnd + calmEventBonus + baitZoneBonus;
     const needleX = x + width * this.reelTension;
     const danger = this.reelTension < 0.18 || this.reelTension > 0.82;
     const inSafeZone = this.isInSafeZone(this.reelTension);
@@ -755,7 +966,8 @@ export class FishingGame implements MiniGame {
 
   private isInSafeZone(tension: number): boolean {
     const eventBonus = this.zoneId === this.dailyEvent.zone.id && this.dailyEvent.effect === 'calm' ? 0.025 : 0;
-    return tension >= this.rod.safeStart - eventBonus && tension <= this.rod.safeEnd + eventBonus;
+    const baitZoneBonus = this.baitId === 'cloud' ? 0.02 : 0;
+    return tension >= this.rod.safeStart - eventBonus - baitZoneBonus && tension <= this.rod.safeEnd + eventBonus + baitZoneBonus;
   }
 
   private getBiteMessage(fish: FishSpecies | null): string {
@@ -791,6 +1003,8 @@ export class FishingGame implements MiniGame {
   }
 
   private getBaitDetail(bait: FishingBait): string {
+    if (bait.id === 'cloud') return '绿区两侧更宽，咬钩与拉线都多一些时间；常见鱼更多，稀有鱼较少';
+    if (bait.id === 'starlight') return '传说鱼更易上钩；咬钩窗口和拉线时间更短，适合冲高分';
     if (bait.id === 'echo') {
       const counts = getFishCounts();
       const availableFish = fishSpecies.filter((fish) => fish.zoneId === this.zoneId && (!fish.eventId || fish.eventId === this.dailyEvent.id));
@@ -1024,8 +1238,35 @@ export class FishingGame implements MiniGame {
       ctx.globalAlpha = 0.5;
       for (let i = 0; i < 5; i += 1) {
         const x = 610 + i * 61;
-        const y = 297 + (i % 2) * 39;
+        const y = 297 + (i % 2) * 39 + (this.getWaterlineY() - 292);
         drawText(ctx, i % 2 === 0 ? '✦' : '·', x, y + Math.sin(now * 2 + i) * 4, i % 2 === 0 ? 13 : 17, '#fff0ad', 700);
+      }
+      ctx.restore();
+    } else if (this.weather.id === 'breeze') {
+      ctx.save();
+      ctx.globalAlpha = 0.28;
+      ctx.strokeStyle = this.zoneId === 'moon' || this.zoneId === 'aurora' ? '#d9f5ff' : '#f3fff0';
+      ctx.lineWidth = 2;
+      ctx.lineCap = 'round';
+      for (let i = 0; i < 8; i += 1) {
+        const x = WIDTH - ((now * (42 + i * 3) + i * 163) % (WIDTH + 90));
+        const y = 150 + i * 44 + Math.sin(now * 1.6 + i) * 7;
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.quadraticCurveTo(x - 23, y - 5, x - 48, y + 2);
+        ctx.stroke();
+      }
+      ctx.restore();
+    } else if (this.weather.id === 'mist') {
+      ctx.save();
+      ctx.globalAlpha = 0.11;
+      ctx.fillStyle = '#f5fff6';
+      for (let i = 0; i < 5; i += 1) {
+        const x = (i * 238 + now * (5 + i)) % (WIDTH + 220) - 110;
+        const y = 298 + i * 37 + Math.sin(now * 0.6 + i) * 8;
+        ctx.beginPath();
+        ctx.ellipse(x, y, 150 + (i % 2) * 28, 11 + (i % 3) * 3, 0, 0, Math.PI * 2);
+        ctx.fill();
       }
       ctx.restore();
     }
@@ -1035,6 +1276,7 @@ export class FishingGame implements MiniGame {
     this.phase = 'waiting';
     this.phaseTimer = 1.1 + Math.random() * 2.1;
     this.currentFish = null;
+    this.shoreMomentFishBoost = false;
     this.biteWindowMax = 0;
     this.resetReel();
   }

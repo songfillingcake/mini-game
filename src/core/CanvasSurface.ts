@@ -4,6 +4,9 @@ export class CanvasSurface {
   readonly context: CanvasRenderingContext2D;
   private observer: ResizeObserver;
   private pixelRatio = 1;
+  private contentScale = 1;
+  private offsetX = 0;
+  private offsetY = 0;
 
   constructor(readonly canvas: HTMLCanvasElement) {
     const context = canvas.getContext('2d');
@@ -24,14 +27,18 @@ export class CanvasSurface {
       this.canvas.width = width;
       this.canvas.height = height;
     }
-    this.context.setTransform(width / WIDTH, 0, 0, height / HEIGHT, 0, 0);
+    this.contentScale = Math.min(rect.width / WIDTH, rect.height / HEIGHT);
+    this.offsetX = (rect.width - WIDTH * this.contentScale) / 2;
+    this.offsetY = (rect.height - HEIGHT * this.contentScale) / 2;
+    const scale = this.contentScale * this.pixelRatio;
+    this.context.setTransform(scale, 0, 0, scale, this.offsetX * this.pixelRatio, this.offsetY * this.pixelRatio);
   }
 
   point(clientX: number, clientY: number): { x: number; y: number } {
     const rect = this.canvas.getBoundingClientRect();
     return {
-      x: ((clientX - rect.left) / rect.width) * WIDTH,
-      y: ((clientY - rect.top) / rect.height) * HEIGHT,
+      x: (clientX - rect.left - this.offsetX) / this.contentScale,
+      y: (clientY - rect.top - this.offsetY) / this.contentScale,
     };
   }
 

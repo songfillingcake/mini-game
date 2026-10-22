@@ -30,7 +30,14 @@ export interface FishingZone {
 }
 
 export interface FishingWeather {
-  id: 'sunny' | 'drizzle' | 'moon-tide';
+  id: 'sunny' | 'drizzle' | 'moon-tide' | 'breeze' | 'mist';
+  icon: string;
+  label: string;
+  detail: string;
+}
+
+export interface FishingDayPhase {
+  id: 'dawn' | 'day' | 'sunset' | 'night';
   icon: string;
   label: string;
   detail: string;
@@ -47,7 +54,7 @@ export interface FishingDailyEvent {
   zone: FishingZone;
 }
 
-export type BaitId = 'crumbs' | 'glow' | 'shrimp' | 'echo';
+export type BaitId = 'crumbs' | 'glow' | 'shrimp' | 'echo' | 'cloud' | 'starlight';
 
 export interface FishingBait {
   id: BaitId;
@@ -291,14 +298,30 @@ export const fishingZones: FishingZone[] = [
 ];
 
 export const fishingWeather: FishingWeather[] = [
-  { id: 'sunny', icon: '☀️', label: '晴日', detail: '常见鱼更愿意靠近岸边' },
-  { id: 'drizzle', icon: '🌦️', label: '细雨', detail: '少见鱼会被雨声吸引' },
-  { id: 'moon-tide', icon: '🌕', label: '月潮', detail: '稀有和传说鱼更活跃' },
+  { id: 'sunny', icon: '☀️', label: '晴日', detail: '常见鱼更靠岸，咬钩提示更久' },
+  { id: 'drizzle', icon: '🌦️', label: '细雨', detail: '少见鱼被雨声吸引，浮标假动作减少' },
+  { id: 'moon-tide', icon: '🌕', label: '月潮', detail: '稀有和传说鱼更活跃，星潮时鱼线更急' },
+  { id: 'breeze', icon: '🍃', label: '穿堂风', detail: '变速习性鱼更活跃，拉线时张力起伏更快' },
+  { id: 'mist', icon: '🌫️', label: '晨雾', detail: '未发现的鱼更容易靠岸，咬钩提示更久' },
 ];
 
 export function getDailyFishingWeather(date = new Date()): FishingWeather {
   const day = Math.floor(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()) / 86_400_000);
   return fishingWeather[((day % fishingWeather.length) + fishingWeather.length) % fishingWeather.length];
+}
+
+export function getFishingDayPhase(date = new Date()): FishingDayPhase {
+  const hour = date.getHours();
+  if (hour >= 5 && hour < 10) {
+    return { id: 'dawn', icon: '🌅', label: '清晨', detail: '未发现的鱼更容易靠岸' };
+  }
+  if (hour >= 10 && hour < 16) {
+    return { id: 'day', icon: '☀️', label: '日照', detail: '常见鱼更愿意靠近' };
+  }
+  if (hour >= 16 && hour < 20) {
+    return { id: 'sunset', icon: '🌇', label: '暮色', detail: '稀有鱼更活跃' };
+  }
+  return { id: 'night', icon: '🌙', label: '夜航', detail: '传说鱼更活跃' };
 }
 
 const zoneEventDetails: Record<FishingZoneId, Omit<FishingDailyEvent, 'zone'>> = {
@@ -330,6 +353,8 @@ export const fishingBaits: FishingBait[] = [
   { id: 'glow', icon: '✨', label: '荧光鱼饵', detail: '稀有和传说鱼更常出现，常见鱼机会略低', unlockAt: 3, unlockHint: '图鉴发现 3 种鱼解锁' },
   { id: 'shrimp', icon: '🦐', label: '虾肉鱼饵', detail: '偏爱当前海域的目标鱼，其他鱼机会略低', unlockAt: 5, unlockHint: '图鉴发现 5 种鱼解锁' },
   { id: 'echo', icon: '🫧', label: '回声鱼饵', detail: '偏爱未发现的鱼；找齐后偏爱未满三星的鱼', unlockAt: 8, unlockHint: '图鉴发现 8 种鱼解锁' },
+  { id: 'cloud', icon: '☁️', label: '云絮软饵', detail: '绿区略宽，咬钩与拉线时间更长；稀有鱼机会略低', unlockAt: 12, unlockHint: '图鉴发现 12 种鱼解锁' },
+  { id: 'starlight', icon: '🌟', label: '星光拟饵', detail: '传说鱼机会大幅提高；收竿窗口和拉线时间更短', unlockAt: 16, unlockHint: '图鉴发现 16 种鱼解锁' },
 ];
 
 const storageKey = 'pocket-play-fish-journal-v1';
