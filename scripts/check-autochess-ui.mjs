@@ -27,7 +27,10 @@ let origin;
 
 async function pageFor(width, height) {
   const context = await browser.newContext({ viewport: { width, height }, storageState: { cookies: [], origins: [] }, reducedMotion: 'reduce' });
-  await context.addInitScript(() => localStorage.setItem('pocket-play-sound-enabled', 'false'));
+  await context.addInitScript(() => {
+    localStorage.setItem('pocket-play-sound-enabled', 'false');
+    localStorage.setItem('pocket-play-autochess-view-v1', '2d');
+  });
   const page = await context.newPage();
   page.on('pageerror', (error) => errors.push(error.message));
   await page.route('**/src/main.ts*', (route) => route.fulfill({ contentType: 'application/javascript', body:

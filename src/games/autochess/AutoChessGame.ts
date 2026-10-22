@@ -4,6 +4,7 @@ import { AUTO_CHESS_SAVE_KEY, AutoChessModel, BENCH_SIZE, FINAL_ROUND, parseRun,
 import type { RunSnapshot } from './AutoChessModel';
 import { encounterNames, factions, guardian, sellValue, starMultiplier, synergyCounts, unitById } from './Units';
 import type { Faction, Piece } from './Units';
+import type { Board3D } from './Board3D';
 import './autochess.css';
 
 function readCheckpoint(): RunSnapshot | null {
@@ -13,6 +14,11 @@ function readCheckpoint(): RunSnapshot | null {
   } catch { return null; }
 }
 const stars = (star: number): string => '★'.repeat(star);
+export const AUTO_CHESS_VIEW_KEY = 'pocket-play-autochess-view-v1';
+function preferredView(): '3d' | '2d' {
+  try { return localStorage.getItem(AUTO_CHESS_VIEW_KEY) === '2d' ? '2d' : '3d'; }
+  catch { return '3d'; }
+}
 
 export class AutoChessGame implements MiniGame {
   readonly id = 'autochess' as const;
@@ -30,6 +36,10 @@ export class AutoChessGame implements MiniGame {
   private paintClock = 0;
   private effects: { node: HTMLElement; life: number }[] = [];
   private saveUnavailable = false;
+  private boardView: Board3D | null = null;
+  private viewMode = preferredView();
+  private viewLoading = false;
+  private viewError = false;
 
   get score(): number { return this.model.state.score; }
   get over(): boolean { return this.model.state.phase === 'ended'; }
@@ -57,6 +67,7 @@ export class AutoChessGame implements MiniGame {
   setActive(active: boolean): void {
     this.active = active;
     if (this.host) this.host.inert = !active;
+    this.boardView?.setActive(active);
   }
   start(): void {
     this.model = new AutoChessModel(!this.started && this.mode === 'continue' ? this.checkpoint || undefined : undefined);
@@ -79,17 +90,19 @@ export class AutoChessGame implements MiniGame {
       if (effect.life <= 0) effect.node.remove();
     }
     this.effects = this.effects.filter((effect) => effect.life > 0);
-    if (this.model.state.phase !== 'battle') return;
+    if (this.model.state.phase !== 'battle') { this.boardView?.update(dt); return; }
     const resolved = this.model.update(dt * this.speed);
     if (resolved) {
       audio.play(this.model.state.lastReport?.win ? 'catch' : 'miss');
       this.save();
       this.draw();
       this.scrollToPhase();
+      this.boardView?.update(dt * this.speed, false, dt);
       return;
     }
     this.paintClock += dt;
     if (this.paintClock >= 0.08) { this.paintClock = 0; this.paintCombat(); }
+    this.boardView?.update(dt * this.speed, false, dt);
   }
   render(_context: CanvasRenderingContext2D, _now: number): void { /* The strategy board uses responsive HTML. */ }
 
@@ -108,13 +121,7 @@ export class AutoChessGame implements MiniGame {
     }
     if (this.model.state.phase !== 'prep') return;
     if (button.dataset.cell !== undefined) {
-      const cell = Number(button.dataset.cell);
-      const occupant = this.model.state.units.find((unit) => unit.cell === cell);
-      if (this.selected && this.selected !== occupant?.uid) {
-        if (this.model.move(this.selected, cell)) { this.selected = null; this.save(); }
-      } else this.selected = this.selected === occupant?.uid ? null : occupant?.uid || null;
-      this.inspectedFaction = null;
-      this.draw();
+      this.pickCell(Number(button.dataset.cell));
     } else if (button.dataset.unit) {
       this.selected = this.selected === button.dataset.unit ? null : button.dataset.unit;
       this.inspectedFaction = null;
@@ -125,7 +132,18 @@ export class AutoChessGame implements MiniGame {
     }
   }
 
+  private pickCell(cell: number): void {
+    if (!this.active || this.model.state.phase !== 'prep' || cell < 18 || cell > 35) return;
+    const occupant = this.model.state.units.find((unit) => unit.cell === cell);
+    if (this.selected && this.selected !== occupant?.uid) {
+      if (this.model.move(this.selected, cell)) { this.selected = null; this.save(); }
+    } else this.selected = this.selected === occupant?.uid ? null : occupant?.uid || null;
+    this.inspectedFaction = null;
+    this.draw();
+  }
+
   private command(action: string, index = 0): void {
+    if (action.startsWith('view-')) { this.viewCommand(action); return; }
     const previousPhase = this.model.state.phase;
     let changed = false;
     switch (action) {
@@ -155,6 +173,62 @@ export class AutoChessGame implements MiniGame {
     if (this.selected && !this.model.state.units.some((unit) => unit.uid === this.selected)) this.selected = null;
     this.draw();
     if (previousPhase !== this.model.state.phase) this.scrollToPhase();
+  }
+
+  private viewCommand(action: string): void {
+    if (action === 'view-toggle') {
+      this.viewMode = this.viewMode === '3d' ? '2d' : '3d';
+      this.viewError = false;
+      try { localStorage.setItem(AUTO_CHESS_VIEW_KEY, this.viewMode); } catch { /* The view is still available for this visit. */ }
+      this.draw();
+    } else if (action === 'view-left') this.boardView?.turn(-1);
+    else if (action === 'view-right') this.boardView?.turn(1);
+    else if (action === 'view-in') this.boardView?.zoom(1);
+    else if (action === 'view-out') this.boardView?.zoom(-1);
+    else if (action === 'view-reset') this.boardView?.resetCamera();
+  }
+
+  private connect3D(): void {
+    const board = this.host?.querySelector<HTMLElement>('.ac-board');
+    if (!board) return;
+    if (this.viewMode === '2d') { this.boardView?.setEnabled(false); return; }
+    if (this.boardView) {
+      this.boardView.setEnabled(true);
+      this.boardView.setActive(this.active);
+      this.boardView.attach(board);
+      board.querySelectorAll<HTMLButtonElement>('[data-cell]').forEach((cell) => { cell.tabIndex = -1; cell.setAttribute('aria-hidden', 'true'); });
+      return;
+    }
+    if (this.viewLoading) return;
+    this.viewLoading = true;
+    const lifetime = this.listener;
+    void import('./Board3D').then(({ Board3D }) => {
+      if (!this.host || this.listener !== lifetime) return;
+      this.viewLoading = false;
+      if (this.viewMode === '2d') return;
+      try {
+        this.boardView = new Board3D(() => ({ phase: this.model.state.phase, allies: this.model.deployed, enemies: this.model.enemies,
+          fighters: this.model.combat?.fighters || null, selected: this.selected }), (cell) => this.pickCell(cell), () => this.fallback3D());
+        this.draw();
+      } catch { this.fallback3D(); }
+    }).catch(() => { if (this.host && this.listener === lifetime) this.fallback3D(); });
+  }
+
+  private fallback3D(): void {
+    this.boardView?.dispose();
+    this.boardView = null;
+    this.viewMode = '2d';
+    this.viewLoading = false;
+    this.viewError = true;
+    if (this.host) this.draw();
+  }
+
+  private viewControls(): string {
+    const ready = this.viewMode === '3d' && Boolean(this.boardView);
+    return '<div class="ac-viewbar" role="group" aria-label="战场视角">' +
+      '<button type="button" data-action="view-toggle" aria-pressed="' + (this.viewMode === '3d') + '">' + (this.viewError ? '重试 3D' : this.viewMode === '3d' ? '二维布阵' : '切换 3D') + '</button>' +
+      (ready ? '<button type="button" data-action="view-left" aria-label="向左旋转视角">↶</button><button type="button" data-action="view-right" aria-label="向右旋转视角">↷</button><button type="button" data-action="view-in" aria-label="放大棋盘">＋</button><button type="button" data-action="view-out" aria-label="缩小棋盘">−</button><button type="button" data-action="view-reset">复位</button>' : '') + '</div>' +
+      '<p class="ac-view-note" role="status">' + (this.viewError ? '3D 暂时不可用，已切换二维棋盘。' : ready ? '拖动旋转 · 双指或滚轮缩放｜首批角色：盾卫、弓手、法师' : this.viewMode === '3d' ? '正在准备 3D 棋盘，可先招募伙伴…' : '点选格子布阵，也可用键盘逐格选择。') + '</p>';
   }
 
   private scrollToPhase(): void {
@@ -259,11 +333,12 @@ export class AutoChessGame implements MiniGame {
     const prep = state.phase === 'prep';
     this.effects = [];
     this.host.innerHTML = '<div class="ac-game"><header class="ac-runbar"><div><span class="ac-kicker">单人远征</span><h2>星岛自走棋</h2></div><div class="ac-run-stats"><span><small>营地生命</small><strong>♥ ' + state.health + '</strong></span><span><small>金币</small><strong>金 ' + state.gold + '</strong></span><span><small>关卡</small><strong>' + state.round + ' / ' + FINAL_ROUND + '</strong></span></div></header>' +
-      '<div class="ac-layout"><section class="ac-arena"><div class="ac-stage-heading"><strong>' + encounterNames[state.round - 1] + '</strong><span data-battle-time>' + (prep ? '上方敌军 · 下方己方' : '') + '</span><button type="button" class="ac-small-button" data-action="speed"' + (state.phase !== 'battle' ? ' hidden' : '') + '>' + this.speed + '× 加速</button></div>' + this.board() +
+      '<div class="ac-layout"><section class="ac-arena"><div class="ac-stage-heading"><strong>' + encounterNames[state.round - 1] + '</strong><span data-battle-time>' + (prep ? '上方敌军 · 下方己方' : '') + '</span><button type="button" class="ac-small-button" data-action="speed"' + (state.phase !== 'battle' ? ' hidden' : '') + '>' + this.speed + '× 加速</button></div>' + this.board() + this.viewControls() +
       '<div class="ac-team-tools"><strong>上阵 ' + this.model.deployed.length + ' / ' + this.model.capacity + '</strong>' + (prep ? '<button type="button" class="ac-small-button" data-action="auto">一键补位</button>' : '<span data-alive-count></span>') + '</div>' + this.traits() + this.bench() + '</section>' +
       '<aside class="ac-command">' + (prep ? '<button type="button" class="ac-battle-button" data-action="battle"' + (!this.model.deployed.length ? ' disabled' : '') + '>开始战斗 <span>第 ' + state.round + ' 关 →</span></button>' + this.inspector() + this.market() : state.phase === 'reward' ? this.rewardPanel() : '<section class="ac-battle-panel"><span class="ac-result-mark">⚔️ 自动交战</span><h3>小队正在战斗</h3><p data-battle-log>双方开始交锋</p><p>30 秒后进入加时，45 秒按剩余生命比例总和结算。</p></section>') +
       '<details class="ac-help"><summary>怎么玩</summary><ol><li>招募伙伴，点伙伴再点己方格子上阵。近战在前，远程在后。</li><li>3 个同名同星自动合成；不同同族棋子激活 2 / 3 羁绊。</li><li>留存金币，每 10 金币带来 1 利息，上限 5。锁定商店可留到下回合。</li><li>每回合 +2 经验；购买经验可提高人口。战后选一份奖励，击败第 8 关守门者。</li></ol><p>准备与领奖阶段自动存档；战斗中离开，下次从出战前继续。</p></details></aside></div></div>';
     if (!prep) this.paintCombat();
+    this.connect3D();
     this.host.inert = !this.active;
     const help = this.host.querySelector<HTMLDetailsElement>('.ac-help');
     if (help) help.open = helpOpen;
@@ -317,6 +392,8 @@ export class AutoChessGame implements MiniGame {
   dispose(): void {
     if (this.started) this.save();
     this.listener?.abort();
+    this.boardView?.dispose();
+    this.boardView = null;
     this.effects = [];
     this.host = null;
   }

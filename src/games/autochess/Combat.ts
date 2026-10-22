@@ -6,6 +6,7 @@ export interface Fighter {
   hp: number; maxHp: number; shield: number; attack: number; armor: number;
   interval: number; spell: number; regen: number; mana: number;
   attackWait: number; moveWait: number; stunned: number; flash: number; dealt: number;
+  targetCell: number | null; attackSerial: number; castSerial: number;
 }
 export interface CombatEvent { cell: number; text: string; kind: 'damage' | 'heal' | 'skill' }
 export type CombatResult = 'win' | 'loss';
@@ -44,6 +45,7 @@ export class Combat {
         spell: 1 + (definition.faction === 'star' ? [0, 0.3, 0.65][tier] : 0),
         regen: definition.faction === 'forest' ? [0, 0.015, 0.03][tier] : 0,
         mana: 0, attackWait: 0.35 + index * 0.07, moveWait: 0, stunned: 0, flash: 0, dealt: 0,
+        targetCell: null, attackSerial: 0, castSerial: 0,
       };
     });
   }
@@ -78,6 +80,7 @@ export class Combat {
         .sort((a, b) => distance(fighter.cell, a.cell) - distance(fighter.cell, b.cell) || a.hp - b.hp);
       if (!targets.length) continue;
       const target = targets[0];
+      fighter.targetCell = target.cell;
       if (distance(fighter.cell, target.cell) > fighter.definition.range) {
         if (fighter.moveWait <= 0) {
           const step = this.findStep(fighter, target);
@@ -89,6 +92,7 @@ export class Combat {
       if (fighter.attackWait > 0) continue;
       fighter.attackWait = fighter.interval / (this.elapsed > 30 ? 1.5 : 1);
       fighter.flash = 0.18;
+      fighter.attackSerial += 1;
       this.damage(fighter, target, fighter.attack);
       fighter.mana += 1;
       if (fighter.mana >= 4) {
@@ -143,6 +147,7 @@ export class Combat {
   }
 
   private cast(source: Fighter, target: Fighter): void {
+    source.castSerial += 1;
     this.log = source.definition.name + ' · ' + source.definition.skillName;
     this.events.push({ cell: source.cell, text: source.definition.skillName, kind: 'skill' });
     const enemies = this.fighters.filter((fighter) => fighter.team !== source.team && fighter.hp > 0);

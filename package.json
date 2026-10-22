@@ -11,10 +11,15 @@
     "check:gameplay": "node scripts/check-gameplay.mjs",
     "check:autochess": "node scripts/check-autochess.cjs",
     "check:autochess-ui": "node scripts/check-autochess-ui.mjs",
+    "check:autochess-3d": "node scripts/check-autochess-3d.mjs",
     "preview": "vite preview"
   },
   "devDependencies": {
+    "@types/three": "^0.186.0",
     "typescript": "^5.7.3",
     "vite": "^6.0.7"
+  },
+  "dependencies": {
+    "three": "^0.186.1"
   }
 }

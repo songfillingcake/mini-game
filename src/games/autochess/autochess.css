@@ -37,6 +37,14 @@ button.ac-cell:hover { background: rgba(135,205,174,.24); border-color: #7fb89c;
 .ac-unit-name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; line-height: 1.5; font-weight: 800; }
 .ac-stars { font-size: 12px; line-height: 1.2; color: #a5792f; letter-spacing: .06em; }
 .ac-board .ac-stars { color: #ffe5a0; }
+.ac-board.is-3d { background: #dce7da; border-color: #819587; }
+.ac-board.is-3d > .ac-cell { opacity: 0; pointer-events: none; }
+.ac-board.is-3d > .ac-combat-layer, .ac-board.is-3d > .ac-effects, .ac-board.is-3d::after { display: none; }
+.ac-3d-canvas { position: absolute; z-index: 3; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+.ac-viewbar { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; margin-top: 12px; }
+.ac-viewbar button { min-height: 44px; min-width: 44px; padding: 8px 12px; border: 1px solid #b9cbbd; border-radius: 10px; background: #f8faf1; color: #436b59; font-size: 16px; font-weight: 800; }
+.ac-viewbar button[aria-pressed="true"] { background: #e0ecdc; border-color: #8aad94; }
+.ac-game .ac-view-note { margin-top: 8px; color: #627766; font-size: 14px; line-height: 1.6; }
 .ac-empty-cell { color: #9dcbb7; font-size: 26px; }
 .ac-combat-layer, .ac-effects { position: absolute; inset: 8px; pointer-events: none; }
 .ac-effects { z-index: 5; overflow: hidden; }
