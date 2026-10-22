@@ -49,15 +49,28 @@ export class App {
   private keyUpHandler: ((event: KeyboardEvent) => void) | null = null;
   private visibilityHandler: (() => void) | null = null;
   private fullscreenChangeHandler: (() => void) | null = null;
+  private homeSectionState = new Map<string, boolean>();
 
   constructor(private readonly root: HTMLElement) {
     this.showHome();
   }
 
   private showHome(notice?: string): void {
+    this.root.querySelectorAll<HTMLDetailsElement>('details[data-home-section]').forEach((section) => {
+      if (section.dataset.homeSection) this.homeSectionState.set(section.dataset.homeSection, section.open);
+    });
     this.disposeGame();
     this.state = 'home';
     this.root.innerHTML = renderHome();
+    this.root.querySelectorAll<HTMLDetailsElement>('details[data-home-section]').forEach((section) => {
+      const id = section.dataset.homeSection;
+      if (!id) return;
+      const wasOpen = this.homeSectionState.get(id);
+      if (wasOpen !== undefined) section.open = wasOpen;
+      section.addEventListener('toggle', () => {
+        if (section.isConnected) this.homeSectionState.set(id, section.open);
+      });
+    });
     this.bindSoundToggle();
     this.root.querySelectorAll<HTMLButtonElement>('[data-game]').forEach((button) => {
       button.addEventListener('click', () => this.openGame(button.dataset.game as GameId));
