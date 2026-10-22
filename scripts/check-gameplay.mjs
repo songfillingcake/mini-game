@@ -110,8 +110,12 @@ async function verifyStorage(page) {
     storage.setSoundEnabled(false);
     storage.saveBest('stacker', 217);
     storage.saveBest('shells', 84);
-    const v3 = JSON.parse(storage.exportSaveBackup());
-    if (v3.version !== 3 || v3.data['pocket-play-best-stacker'] !== '217') throw new Error('v3 stacker export missing');
+    const v4 = JSON.parse(storage.exportSaveBackup());
+    if (v4.version !== 4 || v4.data['pocket-play-best-stacker'] !== '217') throw new Error('v4 export missing');
+    const v3 = structuredClone(v4);
+    v3.version = 3;
+    delete v3.data['pocket-play-best-autochess'];
+    delete v3.data['pocket-play-autochess-run-v1'];
     const v1 = structuredClone(v3);
     v1.version = 1;
     delete v1.data['pocket-play-best-stacker'];
@@ -141,10 +145,9 @@ async function verifyStorage(page) {
 
 let baseURL;
 try {
-  server = await createServer({ root, clearScreen: false, logLevel: 'error', server: { middlewareMode: true, hmr: false, open: false } });
   // Vite normalizes a configured port of 0 to its default port; bind the Node
   // server directly so the OS really allocates a fresh ephemeral port.
-  httpServer = createHttpServer(server.middlewares);
+  httpServer = createHttpServer();
   await new Promise((resolve, reject) => {
     httpServer.once('error', reject);
     httpServer.listen(0, '127.0.0.1', resolve);
@@ -153,11 +156,13 @@ try {
   assert.equal(typeof address, 'object');
   assert.ok(address && ![5173, 5174, 5175].includes(address.port));
   baseURL = 'http://127.0.0.1:' + address.port + '/';
+  server = await createServer({ root, clearScreen: false, logLevel: 'error', server: { middlewareMode: true, hmr: { server: httpServer }, open: false } });
+  httpServer.on('request', server.middlewares);
   browser = await playwright.chromium.launch({ executablePath: installedBrowser, headless: true, args: ['--mute-audio'] });
   const desktop = await makePage({ width: 1440, height: 1000 });
   const page = desktop.page;
   await verifyStorage(page);
-  assert.equal(await page.locator('[data-game]').count(), 5);
+  assert.equal(await page.locator('[data-game]').count(), 6);
   await openStacker(page);
   await page.locator('[data-setup-option="soft-cloud"]').click();
   await page.locator('#overlay-action').click();

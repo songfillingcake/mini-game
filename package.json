@@ -9,6 +9,8 @@
     "build": "tsc --noEmit && vite build",
     "check:fishing": "node scripts/check-fishing.cjs",
     "check:gameplay": "node scripts/check-gameplay.mjs",
+    "check:autochess": "node scripts/check-autochess.cjs",
+    "check:autochess-ui": "node scripts/check-autochess-ui.mjs",
     "preview": "vite preview"
   },
   "devDependencies": {

@@ -302,10 +302,12 @@ export class App {
 
     this.root.innerHTML = this.gameMarkup(info.title, info.icon, info.controls);
     const canvas = this.root.querySelector<HTMLCanvasElement>('#game-canvas');
-    if (!canvas) return;
-    this.surface = new CanvasSurface(canvas);
+    const host = this.root.querySelector<HTMLElement>('#game-content');
+    if (host && this.game.mount) this.game.mount(host);
+    else if (canvas) this.surface = new CanvasSurface(canvas);
+    else return;
     this.bindGameUi();
-    this.bindGameInput(canvas);
+    this.bindGameInput(host || canvas!);
     this.loop = new GameLoop((dt, now) => this.step(dt, now));
     this.loop.start();
     this.updateHud();
@@ -314,13 +316,14 @@ export class App {
 
   private gameMarkup(title: string, icon: string, controls: string): string {
     const directional = this.game?.id === 'dodger' || this.game?.id === 'jumper';
-    return '<div class="play-page"><header class="play-header">' +
+    const responsive = Boolean(this.game?.mount);
+    return '<div class="play-page' + (responsive ? ' is-strategy' : '') + '"><header class="play-header">' +
       '<button class="back-button" id="back-button" aria-label="返回游戏大厅"><span>←</span><span class="back-label">游戏大厅</span></button>' +
       '<a class="brand compact-brand" href="#" aria-label="口袋游乐场"><span class="brand-mark"><span></span><span></span><span></span><span></span></span><span class="brand-name">口袋游乐场<small>POCKET PLAY</small></span></a>' +
       '<div class="play-actions">' + renderSoundToggle() + '<button class="pause-button" id="pause-button" aria-label="暂停游戏">Ⅱ <span>暂停</span></button><button class="fullscreen-button" id="fullscreen-button" type="button" aria-label="进入全屏" aria-pressed="false">⛶ <span>全屏</span></button></div></header>' +
       '<main class="play-main"><div class="game-heading"><div class="game-heading-icon">' + icon + '</div><div><span class="game-eyebrow">NOW PLAYING</span><h1>' + title + '</h1></div><div class="heading-decoration">✦</div></div>' +
       '<section class="game-panel"><div class="hud"><div class="hud-item"><span class="hud-label">得分</span><strong id="score-value">0</strong></div><div class="hud-item"><span class="hud-label">剩余时间</span><strong id="time-value">—</strong></div><div class="hud-item hud-status"><span class="hud-label">状态</span><strong id="status-value">准备中</strong></div><div class="hud-item hud-best"><span class="hud-label">个人最佳</span><strong id="best-value">' + this.bestScore + '</strong></div></div>' +
-      '<div class="canvas-wrap"><canvas id="game-canvas" width="960" height="540" tabindex="0" aria-label="' + title + '游戏区域"></canvas>' +
+      '<div class="canvas-wrap">' + (responsive ? '<div id="game-content" tabindex="0" aria-label="' + title + '游戏区域"></div>' : '<canvas id="game-canvas" width="960" height="540" tabindex="0" aria-label="' + title + '游戏区域"></canvas>') +
       '<div class="game-overlay" id="game-overlay"><div class="overlay-card"><span class="overlay-kicker">POCKET PLAY</span><h2 id="overlay-title"></h2><p id="overlay-description"></p><div class="result-next-step" id="result-next-step" hidden><p id="result-next-step-copy" aria-live="polite"></p><button class="result-next-action" id="result-next-action" type="button"></button></div><div class="setup-picker" id="setup-picker"></div><button class="primary-button" id="overlay-action"></button><button class="text-button" id="overlay-secondary">回到游戏大厅</button></div></div></div></section>' +
       '<div class="play-bottom"><div class="control-hint"><span class="hint-icon">⌨</span><span>' + controls + '</span><span class="hint-divider">·</span><span>Esc 退出全屏 / 返回大厅</span></div>' +
       (directional ? '<div class="touch-controls" aria-label="触屏方向控制"><button type="button" data-key="left" aria-label="向左">←</button><button type="button" data-key="right" aria-label="向右">→</button></div>' : '') +
@@ -392,7 +395,7 @@ export class App {
     });
   }
 
-  private bindGameInput(canvas: HTMLCanvasElement): void {
+  private bindGameInput(canvas: HTMLElement): void {
     this.keyDownHandler = (event: KeyboardEvent): void => {
       const key = this.normalizeKey(event.key);
       const activationKey = key === 'space' || event.key === 'Enter';
@@ -401,7 +404,7 @@ export class App {
         return;
       }
       const focusedControl = event.target instanceof Element
-        ? event.target.closest('button, a, input, select, textarea, [contenteditable="true"]')
+        ? event.target.closest('button, a, input, select, textarea, summary, [contenteditable="true"]')
         : null;
       if (activationKey && focusedControl && !focusedControl.closest('.game-overlay.is-hidden')) return;
       if (['left', 'right', 'up', 'down', 'space'].includes(key)) event.preventDefault();
@@ -467,13 +470,15 @@ export class App {
   }
 
   private step(dt: number, now: number): void {
-    if (!this.game || !this.surface) return;
-    this.surface.resize();
-    const ctx = this.surface.context;
-    ctx.save();
-    ctx.resetTransform();
-    ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-    ctx.restore();
+    if (!this.game) return;
+    this.surface?.resize();
+    const ctx = this.surface?.context;
+    if (ctx) {
+      ctx.save();
+      ctx.resetTransform();
+      ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+      ctx.restore();
+    }
     if (this.state === 'playing') {
       const controls: GameControls = {
         keys: this.keys,
@@ -487,14 +492,16 @@ export class App {
         this.showOverlay();
       }
     }
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(0, 0, WIDTH, HEIGHT);
-    ctx.clip();
-    try {
-      this.game.render(ctx, now);
-    } finally {
-      ctx.restore();
+    if (ctx) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(0, 0, WIDTH, HEIGHT);
+      ctx.clip();
+      try {
+        this.game.render(ctx, now);
+      } finally {
+        ctx.restore();
+      }
     }
     this.updateHud();
   }
@@ -507,7 +514,7 @@ export class App {
     this.state = 'playing';
     this.keys.clear();
     this.showOverlay();
-    this.root.querySelector<HTMLCanvasElement>('#game-canvas')?.focus({ preventScroll: true });
+    this.root.querySelector<HTMLElement>('#game-content, #game-canvas')?.focus({ preventScroll: true });
   }
 
   private restartGame(): void {
@@ -528,7 +535,7 @@ export class App {
     this.state = 'playing';
     this.keys.clear();
     this.showOverlay();
-    this.root.querySelector<HTMLCanvasElement>('#game-canvas')?.focus({ preventScroll: true });
+    this.root.querySelector<HTMLElement>('#game-content, #game-canvas')?.focus({ preventScroll: true });
   }
 
   private togglePause(): void {
@@ -619,6 +626,8 @@ export class App {
                 ? '交换横向或纵向相邻的贝壳、泡泡、珊瑚等物件，连成三个或更多即可消除。四连会留下星星贝壳，再次连到它时会清除整行和整列；连锁消除会叠加得分。'
                 : this.game.id === 'stacker'
                   ? '云砖会左右移动，点击画面、点下方按钮或按空格放下。对齐塔顶才能留下重叠部分，偏出去的部分会掉落；连续完美落点能恢复一些宽度。先选喜欢的节奏，看看能把小屋搭多高。'
+                  : this.game.id === 'autochess'
+                    ? '招募伙伴，点棋子再点己方格子布阵；3 个同名同星自动合成。不同同族伙伴激活羁绊，战后挑选奖励，挑战第 8 关守门者。准备阶段会自动保存。'
                   : '放轻松，跟着节奏玩就好。准备好后，按下按钮开始。',
         action: '开始游戏',
       },
@@ -661,6 +670,7 @@ export class App {
       nextStepAction.dataset.resultAction = nextStepActionId;
     }
     overlay.classList.toggle('is-hidden', this.state === 'playing');
+    this.game.setActive?.(this.state === 'playing');
     secondary.textContent = this.state === 'ended' ? '选另一款游戏' : '回到游戏大厅';
     pause.disabled = this.state === 'ready' || this.state === 'ended';
     const tapAction = this.root.querySelector<HTMLButtonElement>('#game-tap-action');

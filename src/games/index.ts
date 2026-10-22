@@ -4,6 +4,7 @@ import { FishingGame } from './fishing/FishingGame';
 import { JumperGame } from './jumper/JumperGame';
 import { ShellMatchGame } from './shells/ShellMatchGame';
 import { CloudStackGame } from './stacker/CloudStackGame';
+import { AutoChessGame } from './autochess/AutoChessGame';
 
 export interface GameCardInfo {
   id: GameId;
@@ -17,6 +18,16 @@ export interface GameCardInfo {
 }
 
 export const gameCards: GameCardInfo[] = [
+  {
+    id: 'autochess',
+    title: '星岛自走棋',
+    subtitle: '招募伙伴，组合你的阵容',
+    description: '招募、合成、布阵，激活四种羁绊；在八关单人远征中选择奖励，挑战黯星守门者。',
+    controls: '点选招募与布阵 / 空格出战',
+    icon: '♟️',
+    color: 'sky',
+    tag: '单人策略',
+  },
   {
     id: 'fishing',
     title: '猫猫钓鱼',
@@ -71,6 +82,7 @@ export const gameCards: GameCardInfo[] = [
 
 export function createGame(id: GameId): MiniGame {
   switch (id) {
+    case 'autochess': return new AutoChessGame();
     case 'fishing': return new FishingGame();
     case 'dodger': return new DodgerGame();
     case 'jumper': return new JumperGame();

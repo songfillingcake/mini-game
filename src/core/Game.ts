@@ -1,4 +1,4 @@
-export type GameId = 'fishing' | 'dodger' | 'jumper' | 'shells' | 'stacker';
+export type GameId = 'fishing' | 'dodger' | 'jumper' | 'shells' | 'stacker' | 'autochess';
 
 export interface GameControls {
   keys: ReadonlySet<string>;
@@ -32,6 +32,8 @@ export interface MiniGame {
   press?(x?: number, y?: number): void;
   selectSetupOption?(id: string): void;
   pointerDown?(x: number, y: number): void;
+  mount?(host: HTMLElement): void;
+  setActive?(active: boolean): void;
   dispose?(): void;
 }
 

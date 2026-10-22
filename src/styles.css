@@ -878,7 +878,7 @@ button:focus-visible, a:focus-visible { outline: 3px solid #e98a70; outline-offs
 /* A quiet hall: short goals first, optional collection tools below. */
 .home-page .intro { min-height: 220px; padding-top: 12px; }
 .home-page .intro h1 { font-size: clamp(48px, 5vw, 64px); margin-top: 14px; }
-.home-page .game-grid { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; }
+.home-page .game-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
 .home-page .game-card { min-height: 250px; padding: 18px; }
 .home-page .card-art { height: 90px; margin: 0 0 10px; }
 .home-page .art-orbit { width: 82px; height: 82px; }
@@ -947,6 +947,10 @@ button:focus-visible, a:focus-visible { outline: 3px solid #e98a70; outline-offs
   .home-page .card-footer { margin-top: 10px; padding-top: 8px; }
   .home-page .journal-heading h2 { font-size: 24px; }
   .home-page .home-disclosure > summary { font-size: 17px; gap: 8px; }
+}
+
+@media (min-width: 1200px) {
+  .home-page .game-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); }
 }
 
 @media (prefers-reduced-motion: reduce) {
