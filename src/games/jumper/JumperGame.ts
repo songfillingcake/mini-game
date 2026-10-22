@@ -1,12 +1,19 @@
 import { clamp, drawText, HEIGHT, roundedRect, WIDTH } from '../../core/Game';
 import { audio } from '../../core/Audio';
-import type { GameControls, MiniGame } from '../../core/Game';
+import type { GameControls, GameSetupOption, MiniGame } from '../../core/Game';
+
+type JumperRoute = 'star-chaser' | 'spring-rider' | 'steady-climb';
 
 interface Platform {
   x: number;
   y: number;
   width: number;
   spring: boolean;
+  moving: boolean;
+  moveSpeed: number;
+  moveDirection: -1 | 1;
+  fragile: boolean;
+  broken: boolean;
   hasStar: boolean;
   collected: boolean;
 }
@@ -26,11 +33,32 @@ export class JumperGame implements MiniGame {
   private scoreValue = 0;
   private ended = false;
   private springFlash = 0;
+  private hasShownMovingPlatform = false;
+  private starsCollected = 0;
+  private starStreak = 0;
+  private bestStarStreak = 0;
+  private skyStage = 0;
+  private skyStageFlash = 0;
+  private route: JumperRoute = 'star-chaser';
 
   get score(): number { return this.scoreValue; }
   get over(): boolean { return this.ended; }
-  get outcome(): string { return '爬到 ' + this.scoreValue + ' 米高'; }
-  get statusText(): string { return '高度 ' + this.scoreValue + ' m'; }
+  get setupOptions(): readonly GameSetupOption[] {
+    return [
+      { id: 'star-chaser', group: '路线', icon: '⭐', label: '追星小径', detail: '星星平台更多，连着收集更容易；平台稍窄', unlocked: true },
+      { id: 'spring-rider', group: '路线', icon: '↟', label: '弹簧巡游', detail: '弹簧平台更多，踩中后跳得更高；星星略少', unlocked: true },
+      { id: 'steady-climb', group: '路线', icon: '🐾', label: '稳步登高', detail: '平台更宽，更容易踩稳；星星机会保持均衡', unlocked: true },
+    ];
+  }
+  get selectedSetupOption(): string { return this.route; }
+  selectSetupOption(id: string): void {
+    if (id === 'star-chaser' || id === 'spring-rider' || id === 'steady-climb') this.route = id;
+  }
+  get outcome(): string {
+    const streak = this.bestStarStreak > 0 ? '最高连星 x' + this.bestStarStreak : '还没踩中星星';
+    return '走' + this.getRouteName() + '，爬到 ' + this.getAltitude() + ' 米高，收集 ' + this.starsCollected + ' 颗星，' + streak + '，总得分 ' + this.scoreValue;
+  }
+  get statusText(): string { return '高度 ' + this.getAltitude() + 'm　★ ' + this.starsCollected + (this.starStreak > 1 ? ' · 连星 x' + this.starStreak : ''); }
 
   start(): void {
     this.playerX = WIDTH / 2;
@@ -39,10 +67,10 @@ export class JumperGame implements MiniGame {
     this.velocityY = 30;
     this.cameraY = 0;
     this.platforms = [
-      { x: 385, y: 480, width: 190, spring: false, hasStar: false, collected: false },
-      { x: 185, y: 382, width: 140, spring: false, hasStar: true, collected: false },
-      { x: 615, y: 288, width: 142, spring: true, hasStar: false, collected: false },
-      { x: 365, y: 192, width: 140, spring: false, hasStar: false, collected: false },
+      { x: 385, y: 480, width: 190, spring: false, moving: false, moveSpeed: 0, moveDirection: 1, fragile: false, broken: false, hasStar: false, collected: false },
+      { x: 185, y: 382, width: this.getRoutePlatformWidth(140), spring: false, moving: false, moveSpeed: 0, moveDirection: 1, fragile: false, broken: false, hasStar: Math.random() < this.getStarChance(), collected: false },
+      { x: 615, y: 288, width: 142, spring: true, moving: false, moveSpeed: 0, moveDirection: 1, fragile: false, broken: false, hasStar: false, collected: false },
+      { x: 365, y: 192, width: this.getRoutePlatformWidth(140), spring: false, moving: false, moveSpeed: 0, moveDirection: 1, fragile: false, broken: false, hasStar: Math.random() < this.getStarChance(), collected: false },
     ];
     this.topPlatformY = 192;
     this.peakY = 420;
@@ -50,6 +78,12 @@ export class JumperGame implements MiniGame {
     this.scoreValue = 0;
     this.ended = false;
     this.springFlash = 0;
+    this.hasShownMovingPlatform = false;
+    this.starsCollected = 0;
+    this.starStreak = 0;
+    this.bestStarStreak = 0;
+    this.skyStage = 0;
+    this.skyStageFlash = 0;
     this.createPlatformsAbove();
   }
 
@@ -60,10 +94,24 @@ export class JumperGame implements MiniGame {
     if (controls.pointerX !== null) this.playerX += clamp(controls.pointerX - this.playerX, -470 * dt, 470 * dt);
     this.playerX = clamp(this.playerX, 35, WIDTH - 35);
 
+    for (const platform of this.platforms) {
+      if (!platform.moving || platform.broken) continue;
+      platform.x += platform.moveDirection * platform.moveSpeed * dt;
+      const rightEdge = WIDTH - platform.width - 24;
+      if (platform.x <= 24) {
+        platform.x = 24;
+        platform.moveDirection = 1;
+      } else if (platform.x >= rightEdge) {
+        platform.x = rightEdge;
+        platform.moveDirection = -1;
+      }
+    }
+
     this.previousY = this.playerY;
     this.velocityY += 1120 * dt;
     this.playerY += this.velocityY * dt;
     this.springFlash = Math.max(0, this.springFlash - dt);
+    this.skyStageFlash = Math.max(0, this.skyStageFlash - dt);
 
     if (this.velocityY > 0) {
       for (const platform of this.platforms) {
@@ -71,7 +119,7 @@ export class JumperGame implements MiniGame {
         const overlaps = this.playerX + 19 >= platform.x && this.playerX - 19 <= platform.x + platform.width;
         if (crossed && overlaps) {
           this.playerY = platform.y - 22;
-          this.velocityY = platform.spring ? -860 : -680;
+          this.velocityY = platform.spring ? this.route === 'spring-rider' ? -940 : -860 : -680;
           if (platform.spring) {
             this.springFlash = 0.4;
             audio.play('spring');
@@ -80,9 +128,15 @@ export class JumperGame implements MiniGame {
           }
           if (platform.hasStar && !platform.collected) {
             platform.collected = true;
-            this.bonus += 30;
+            this.starsCollected += 1;
+            this.starStreak += 1;
+            this.bestStarStreak = Math.max(this.bestStarStreak, this.starStreak);
+            this.bonus += 30 + Math.min(this.starStreak - 1, 5) * 12;
             audio.play('star');
+          } else {
+            this.starStreak = 0;
           }
+          if (platform.fragile) platform.broken = true;
           break;
         }
       }
@@ -91,30 +145,56 @@ export class JumperGame implements MiniGame {
     this.peakY = Math.min(this.peakY, this.playerY);
     this.cameraY = Math.min(this.cameraY, this.playerY - 245);
     this.createPlatformsAbove();
-    this.platforms = this.platforms.filter((platform) => platform.y < this.cameraY + HEIGHT + 100);
-    this.scoreValue = Math.max(0, Math.floor((420 - this.peakY) / 10)) + this.bonus;
+    this.platforms = this.platforms.filter((platform) => !platform.broken && platform.y < this.cameraY + HEIGHT + 100);
+    this.scoreValue = this.getAltitude() + this.bonus;
+    const reachedStage = this.getSkyStage();
+    if (reachedStage > this.skyStage) {
+      this.skyStage = reachedStage;
+      this.skyStageFlash = 2.8;
+      audio.play('unlock');
+    }
 
     if (this.playerY - this.cameraY > HEIGHT + 60) this.ended = true;
   }
 
   render(ctx: CanvasRenderingContext2D, now: number): void {
+    const stage = this.getSkyStage();
+    const skyPalettes = [
+      { top: '#bde6e4', bottom: '#e9f3d1', cloud: 'rgba(255,255,255,.55)', ridge: 'rgba(104,163,145,.18)' },
+      { top: '#a9c9eb', bottom: '#f4e1c6', cloud: 'rgba(255,255,255,.68)', ridge: 'rgba(100,136,184,.2)' },
+      { top: '#263965', bottom: '#7083ad', cloud: 'rgba(230,239,255,.34)', ridge: 'rgba(134,152,205,.23)' },
+    ];
+    const palette = skyPalettes[stage];
     const sky = ctx.createLinearGradient(0, 0, 0, HEIGHT);
-    sky.addColorStop(0, '#bde6e4');
-    sky.addColorStop(1, '#e9f3d1');
+    sky.addColorStop(0, palette.top);
+    sky.addColorStop(1, palette.bottom);
     ctx.fillStyle = sky;
     ctx.fillRect(0, 0, WIDTH, HEIGHT);
+
+    if (stage >= 2) {
+      for (let i = 0; i < 25; i += 1) {
+        const x = (i * 173 + 41) % WIDTH;
+        const y = (i * 89 + 23) % 310;
+        ctx.globalAlpha = 0.35 + (Math.sin(now * 2 + i) + 1) * 0.24;
+        ctx.fillStyle = '#fff2bd';
+        ctx.beginPath();
+        ctx.arc(x, y, i % 5 === 0 ? 2 : 1.1, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    }
 
     for (let i = 0; i < 7; i += 1) {
       const x = (i * 169 + 80) % WIDTH;
       const y = ((i * 127 - this.cameraY * 0.22) % 650 + 650) % 650 - 55;
-      ctx.fillStyle = 'rgba(255,255,255,.55)';
+      ctx.fillStyle = palette.cloud;
       ctx.beginPath();
       ctx.ellipse(x, y, 42, 15, 0, 0, Math.PI * 2);
       ctx.ellipse(x + 30, y + 4, 29, 12, 0, 0, Math.PI * 2);
       ctx.fill();
     }
 
-    ctx.fillStyle = 'rgba(104,163,145,.18)';
+    ctx.fillStyle = palette.ridge;
     ctx.beginPath();
     ctx.moveTo(0, 460);
     ctx.quadraticCurveTo(160, 380, 330, 470);
@@ -126,8 +206,23 @@ export class JumperGame implements MiniGame {
 
     for (const platform of this.platforms) this.drawPlatform(ctx, platform);
     this.drawPlayer(ctx, this.playerX, this.playerY - this.cameraY, now);
-    drawText(ctx, '踩住平台一直往上跳，别掉下去', WIDTH / 2, 42, 18, '#355b5a', 800);
-    drawText(ctx, '落在星星平台可加分 · 弹簧平台跳得更高', WIDTH / 2, 500, 14, '#547a77', 600);
+    const titleColor = stage >= 2 ? '#fff0bd' : stage === 1 ? '#354f70' : '#355b5a';
+    const hintColor = stage >= 2 ? 'rgba(255,246,218,.84)' : '#547a77';
+    drawText(ctx, '踩住平台一直往上跳，别掉下去', WIDTH / 2, 42, 18, titleColor, 800);
+    drawText(ctx, '本局路线 · ' + this.getRouteName(), WIDTH / 2, 69, 12, hintColor, 800);
+    if (this.starStreak > 1) drawText(ctx, '连星 x' + this.starStreak + ' · 下一颗 +' + Math.min(this.starStreak, 5) * 12, 165, 76, 13, stage >= 2 ? '#fff0bd' : '#426b64', 900);
+    drawText(ctx, '横移平台记得提前踩稳 · 裂纹平台只够踩一次 · 星星加分', WIDTH / 2, 514, 13, hintColor, 600);
+    this.drawUpcomingPlatforms(ctx);
+    if (this.skyStageFlash > 0) {
+      ctx.save();
+      ctx.globalAlpha = Math.min(1, this.skyStageFlash);
+      ctx.fillStyle = 'rgba(255,255,255,.82)';
+      roundedRect(ctx, 355, 66, 250, 34, 17);
+      ctx.fill();
+      const stageName = stage === 2 ? '星光天际' : stage === 1 ? '云朵海' : '低空草甸';
+      drawText(ctx, stageName + ' · ' + this.getAltitude() + 'm', WIDTH / 2, 83, 14, '#54756c', 900);
+      ctx.restore();
+    }
     if (this.springFlash > 0) {
       ctx.save();
       ctx.globalAlpha = this.springFlash * 0.42;
@@ -137,36 +232,93 @@ export class JumperGame implements MiniGame {
     }
   }
 
+  private drawUpcomingPlatforms(ctx: CanvasRenderingContext2D): void {
+    const rising = this.velocityY < 0;
+    const upcoming = this.platforms
+      .filter((platform) => !platform.broken && (rising ? platform.y < this.playerY - 12 : platform.y > this.playerY + 12))
+      .sort((a, b) => rising ? b.y - a.y : a.y - b.y)
+      .slice(0, 3);
+
+    ctx.fillStyle = 'rgba(255,255,255,.76)';
+    roundedRect(ctx, 770, 88, 166, 110, 14);
+    ctx.fill();
+    drawText(ctx, rising ? '↑ 上升路线' : '↓ 下落落点', 853, 103, 12, '#45635e', 900);
+
+    upcoming.forEach((platform, index) => {
+      const label = platform.hasStar
+        ? platform.collected ? '✓ 星星已取' : '⭐ 星星'
+        : platform.spring ? '↟ 弹簧'
+          : platform.moving ? '↔ 横移'
+            : platform.fragile ? '◇ 裂纹'
+              : '· 普通';
+      const color = platform.hasStar && !platform.collected
+        ? 'rgba(255,232,170,.9)'
+        : platform.fragile
+          ? 'rgba(255,214,205,.9)'
+          : platform.moving
+            ? 'rgba(206,229,250,.9)'
+            : 'rgba(215,240,225,.9)';
+      const y = 120 + index * 25;
+      ctx.fillStyle = color;
+      roundedRect(ctx, 782, y - 9, 142, 20, 10);
+      ctx.fill();
+      drawText(ctx, (index + 1) + '  ' + label, 853, y + 1, 11, '#3f5d58', 800);
+    });
+    if (upcoming.length === 0) drawText(ctx, '前方平台生成中', 853, 147, 11, '#607b77', 700);
+  }
+
   private createPlatformsAbove(): void {
     const previous = this.platforms.find((platform) => platform.y === this.topPlatformY);
     let previousCenter = previous ? previous.x + previous.width / 2 : WIDTH / 2;
+    const stage = this.getSkyStage();
     while (this.topPlatformY > this.cameraY - 180) {
-      const gap = 82 + Math.random() * 24;
+      const gap = 82 + stage * 4 + Math.random() * (24 + stage * 5);
       this.topPlatformY -= gap;
-      const width = 112 + Math.random() * 44;
-      const center = clamp(previousCenter + (Math.random() - 0.5) * 420, 48 + width / 2, WIDTH - 48 - width / 2);
-      const x = center - width / 2;
+      const width = this.getRoutePlatformWidth(112 - stage * 6 + Math.random() * (44 - stage * 7));
+      const platformWidth = width;
+      const routeCenter = clamp(previousCenter + (Math.random() - 0.5) * 420, 48 + platformWidth / 2, WIDTH - 48 - platformWidth / 2);
+      const x = routeCenter - platformWidth / 2;
+      const spring = Math.random() < (this.route === 'spring-rider' ? 0.29 : 0.14);
+      const moving = !spring && (!this.hasShownMovingPlatform || Math.random() < 0.2 + stage * 0.06);
+      if (moving) this.hasShownMovingPlatform = true;
       this.platforms.push({
         x,
         y: this.topPlatformY,
-        width,
-        spring: Math.random() < 0.14,
-        hasStar: Math.random() < 0.32,
+        width: platformWidth,
+        spring,
+        moving,
+        moveSpeed: moving ? 70 + Math.random() * 45 : 0,
+        moveDirection: Math.random() < 0.5 ? -1 : 1,
+        fragile: !spring && !moving && Math.random() < 0.13 + stage * 0.05,
+        broken: false,
+        hasStar: Math.random() < this.getStarChance(),
         collected: false,
       });
-      previousCenter = center;
+      previousCenter = routeCenter;
     }
   }
 
   private drawPlatform(ctx: CanvasRenderingContext2D, platform: Platform): void {
     const y = platform.y - this.cameraY;
     if (y < -50 || y > HEIGHT + 30) return;
-    ctx.fillStyle = platform.spring ? '#ee8b72' : '#6eaa83';
+    const stage = this.getSkyStage();
+    const normal = stage === 2 ? '#7788c0' : stage === 1 ? '#6e9cb5' : '#6eaa83';
+    const normalHighlight = stage === 2 ? '#c1c9f0' : stage === 1 ? '#b7dddd' : '#a9d99b';
+    ctx.fillStyle = platform.spring ? '#ee8b72' : platform.moving ? '#7489b7' : platform.fragile ? '#bd8a76' : normal;
     roundedRect(ctx, platform.x, y, platform.width, 19, 10);
     ctx.fill();
-    ctx.fillStyle = platform.spring ? '#ffc38e' : '#a9d99b';
+    ctx.fillStyle = platform.spring ? '#ffc38e' : platform.moving ? '#c4c8ed' : platform.fragile ? '#e9b39a' : normalHighlight;
     roundedRect(ctx, platform.x + 4, y + 2, platform.width - 8, 7, 5);
     ctx.fill();
+    if (platform.fragile) {
+      ctx.strokeStyle = 'rgba(112,66,57,.72)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(platform.x + platform.width * 0.42, y + 3);
+      ctx.lineTo(platform.x + platform.width * 0.5, y + 10);
+      ctx.lineTo(platform.x + platform.width * 0.57, y + 6);
+      ctx.stroke();
+    }
     if (platform.spring) {
       ctx.strokeStyle = '#fff1c5';
       ctx.lineWidth = 3;
@@ -177,6 +329,7 @@ export class JumperGame implements MiniGame {
       ctx.lineTo(platform.x + platform.width * 0.68, y + 5);
       ctx.stroke();
     }
+    if (platform.moving) drawText(ctx, '↔', platform.x + platform.width / 2, y + 12, 12, '#f7f4ff', 900);
     if (platform.hasStar && !platform.collected) {
       ctx.fillStyle = '#ffcf5c';
       ctx.beginPath();
@@ -209,5 +362,31 @@ export class JumperGame implements MiniGame {
     ctx.arc(0, 4, 2.5, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
+  }
+
+  private getAltitude(): number {
+    return Math.max(0, Math.floor((420 - this.peakY) / 10));
+  }
+
+  private getSkyStage(): number {
+    const altitude = this.getAltitude();
+    return altitude >= 180 ? 2 : altitude >= 80 ? 1 : 0;
+  }
+
+  private getRouteName(): string {
+    if (this.route === 'spring-rider') return '弹簧巡游';
+    if (this.route === 'steady-climb') return '稳步登高';
+    return '追星小径';
+  }
+
+  private getRoutePlatformWidth(baseWidth: number): number {
+    const routeAdjustment = this.route === 'steady-climb' ? 16 : this.route === 'star-chaser' ? -8 : 0;
+    return baseWidth + routeAdjustment;
+  }
+
+  private getStarChance(): number {
+    if (this.route === 'star-chaser') return 0.48;
+    if (this.route === 'spring-rider') return 0.26;
+    return 0.32;
   }
 }

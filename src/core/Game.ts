@@ -5,6 +5,16 @@ export interface GameControls {
   pointerX: number | null;
 }
 
+export interface GameSetupOption {
+  id: string;
+  group?: string;
+  icon: string;
+  label: string;
+  detail: string;
+  unlocked: boolean;
+  unlockHint?: string;
+}
+
 export interface MiniGame {
   readonly id: GameId;
   readonly title: string;
@@ -13,10 +23,14 @@ export interface MiniGame {
   readonly timeLeft?: number;
   readonly over: boolean;
   readonly outcome: string;
+  readonly setupOptions?: readonly GameSetupOption[];
+  readonly selectedSetupOption?: string;
+  readonly selectedSetupOptions?: Readonly<Record<string, string>>;
   start(): void;
   update(dt: number, controls: GameControls): void;
   render(ctx: CanvasRenderingContext2D, now: number): void;
   press?(x?: number, y?: number): void;
+  selectSetupOption?(id: string): void;
   pointerDown?(x: number, y: number): void;
   dispose?(): void;
 }

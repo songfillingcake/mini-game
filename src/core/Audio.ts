@@ -1,10 +1,12 @@
 import { getSoundEnabled, setSoundEnabled } from './Storage';
 
-export type SoundCue = 'start' | 'bite' | 'catch' | 'fake' | 'miss' | 'hit' | 'star' | 'bounce' | 'spring' | 'finish';
+export type SoundCue = 'start' | 'bite' | 'reel' | 'strain' | 'catch' | 'fake' | 'miss' | 'hit' | 'star' | 'bounce' | 'spring' | 'unlock' | 'finish';
 
 const notes: Record<SoundCue, number[]> = {
   start: [440, 660],
   bite: [620, 880],
+  reel: [520, 720],
+  strain: [260, 190],
   catch: [523, 659, 784],
   fake: [400, 330],
   miss: [392, 294],
@@ -12,6 +14,7 @@ const notes: Record<SoundCue, number[]> = {
   star: [880, 1175],
   bounce: [390],
   spring: [520, 780],
+  unlock: [523, 784, 1047, 1319],
   finish: [659, 523, 392],
 };
 
