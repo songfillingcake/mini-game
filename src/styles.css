@@ -721,6 +721,160 @@ button:focus-visible, a:focus-visible { outline: 3px solid #e98a70; outline-offs
   .bottom-tip { display: none; }
 }
 
+/* Hall text remains readable at every breakpoint, including collection details. */
+.home-page { font-size: 16px; line-height: 1.6; }
+.home-page :is(.intro p, .card-description, .journal-heading p,
+  .daily-event-target small, .daily-event-fish-hint, .daily-sighting > p,
+  .daily-quest > p, .daily-quest > small, .journal-unlock-hint,
+  .journal-daily-weather, .aquarium-hint, .aquarium-empty,
+  .fishing-workshop > div > small) {
+  font-size: 16px;
+  line-height: 1.65;
+  color: #53695d;
+}
+.home-page :is(.eyebrow, .header-note, .card-tag, .card-subtitle, .card-footer,
+  .journal-eyebrow, .fish-trophy-progress strong, .fish-trophy-progress > div > span,
+  .fish-trophy-progress > small, .journal-zone-heading > span, .journal-zone-heading small,
+  .journal-fish-meta, .journal-fish-friendship, .journal-fish-habit, .journal-fish-trophy,
+  .daily-event-eyebrow, .daily-sighting-eyebrow, .daily-quest-eyebrow,
+  .daily-sighting-reward, .daily-sighting-fish > div > small, .daily-quest > p > span,
+  .fish-milestones-heading > span, .fish-milestone small,
+  .aquarium-title, .aquarium-count, .aquarium-shop-heading > span,
+  .aquarium-decor-option small, .fishing-workshop > div > span, .rod-upgrade-max,
+  .home-footer) {
+  font-size: 14px;
+  line-height: 1.6;
+  color: #657363;
+}
+.home-page :is(.daily-event-top strong, .daily-event-target strong,
+  .daily-sighting-top strong, .daily-sighting-fish > div > strong,
+  .daily-quest-top strong, .fish-milestones-heading strong, .aquarium-shop-heading strong,
+  .fishing-workshop > div > strong, .journal-zone-heading h3) {
+  font-size: 18px;
+  line-height: 1.5;
+}
+.home-page :is(.save-backup-button, .sound-toggle, .collection-share-button,
+  .daily-event-action, .daily-sighting-action, .rod-upgrade-button) {
+  min-height: 44px;
+  font-size: 16px;
+  line-height: 1.5;
+  padding: 8px 14px;
+}
+.home-page .brand-name { font-size: 20px; }
+.home-page .brand-name small { font-size: 12px; }
+.home-page .header-actions { gap: 12px; }
+.home-page .game-grid { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; }
+.home-page .game-card { padding: 22px; }
+.home-page .card-title { font-size: 26px; line-height: 1.35; }
+.home-page .card-description { max-width: none; margin-top: 14px; }
+.home-page .card-footer { flex-wrap: wrap; gap: 8px 12px; margin-top: 18px; }
+.home-page .journal-heading { flex-wrap: wrap; gap: 12px; }
+.home-page .journal-heading h2 { font-size: 30px; line-height: 1.4; }
+.home-page .journal-heading h2 span { font-size: 18px; vertical-align: baseline; }
+.home-page .journal-catch-count strong { font-size: 32px; }
+.home-page .journal-catch-count span { font-size: 16px; }
+.home-page .fish-trophy-progress { margin: 0 0 20px; }
+.home-page .fish-trophy-progress > small { margin-top: 8px; }
+.home-page .journal-unlock-hint { margin-bottom: 16px; }
+.home-page .journal-daily-weather { flex-wrap: wrap; gap: 6px 12px; margin: 0 0 20px; }
+.home-page .journal-daily-weather strong { font-size: 16px; }
+.home-page :is(.daily-event, .daily-sighting, .daily-quest) { padding: 18px 20px; margin-bottom: 18px; }
+.home-page .daily-event { gap: 12px; }
+.home-page :is(.daily-event-top, .daily-sighting-top, .daily-quest-top) { flex-wrap: wrap; gap: 10px; }
+.home-page :is(.daily-event-target, .daily-sighting-fish) { gap: 12px; }
+.home-page .daily-event-target strong { overflow: visible; white-space: normal; }
+.home-page .daily-event-fish-hint { margin: 0; }
+.home-page .daily-event-icon { width: 40px; height: 40px; font-size: 26px; }
+.home-page .daily-event-target > span { flex-basis: 44px; width: 44px; height: 44px; font-size: 28px; }
+.home-page .daily-sighting-fish { flex-wrap: wrap; margin-top: 14px; }
+.home-page .daily-sighting-fish > span { width: 44px; height: 44px; font-size: 30px; }
+.home-page .daily-sighting-fish > i { font-size: 18px; }
+.home-page .daily-sighting > p { margin: 12px 0 8px; }
+.home-page .shell-balance { font-size: 18px; }
+.home-page .daily-quest > p { margin: 14px 0 10px; }
+.home-page .daily-quest > small { margin-top: 10px; }
+.home-page .fish-milestones { margin-bottom: 22px; }
+.home-page :is(.fish-milestones-heading, .aquarium-shop-heading) { flex-wrap: wrap; gap: 6px 14px; margin-bottom: 12px; }
+.home-page .fish-milestone-list { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.home-page .fish-milestone { grid-template-columns: 32px minmax(0, 1fr); grid-template-rows: auto auto 6px; gap: 6px 10px; padding: 16px 14px; }
+.home-page .fish-milestone-icon { font-size: 26px; }
+.home-page .fish-milestone strong { overflow: visible; white-space: normal; font-size: 16px; line-height: 1.5; }
+.home-page .fish-milestone.is-claimed strong { padding-right: 48px; }
+.home-page .fish-milestone em { top: 8px; right: 10px; font-size: 12px; }
+.home-page .fish-milestone > i { height: 6px; }
+.home-page .fish-aquarium { margin-bottom: 10px; }
+.home-page .aquarium-title { max-width: calc(100% - 75px); }
+.home-page .aquarium-title, .home-page .aquarium-count { line-height: 1.5; color: #356463; }
+.home-page .fish-aquarium:is([data-aquarium-theme="moon"], [data-aquarium-theme="aurora"]) :is(.aquarium-title, .aquarium-count) { color: #eef7ff; }
+.home-page .aquarium-hint { flex-wrap: wrap; gap: 10px; margin-bottom: 18px; }
+.home-page .aquarium-shop { padding: 18px; margin-bottom: 20px; }
+.home-page :is(.aquarium-decor-options, .cat-accessory-options) { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+.home-page .aquarium-decor-option { grid-template-columns: 32px minmax(0, 1fr); gap: 5px 10px; min-height: 84px; padding: 12px; }
+.home-page .aquarium-decor-option > span { font-size: 26px; }
+.home-page .aquarium-decor-option strong { overflow: visible; white-space: normal; font-size: 16px; line-height: 1.5; }
+.home-page .fishing-workshop { flex-wrap: wrap; padding: 18px 20px; gap: 16px; margin-bottom: 24px; }
+.home-page .fishing-workshop > div { flex: 1 1 220px; gap: 6px; }
+.home-page .journal-zones { gap: 24px; }
+.home-page .journal-zone + .journal-zone { padding-top: 22px; }
+.home-page .journal-zone-heading { margin-bottom: 12px; gap: 8px 12px; }
+.home-page .journal-grid { grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; }
+.home-page .journal-fish { min-height: 190px; gap: 6px; padding: 14px 12px; }
+.home-page .journal-fish[type="button"] { padding: 14px 12px; }
+.home-page .journal-fish-icon { min-height: 44px; font-size: 36px; }
+.home-page .journal-fish-icon.is-hidden { width: 44px; height: 44px; font-size: 24px; }
+.home-page .journal-fish-name { font-size: 18px; line-height: 1.5; }
+.home-page :is(.journal-fish-name, .journal-fish-friendship, .journal-fish-habit) { overflow: visible; max-width: 100%; white-space: normal; }
+.home-page .journal-fish-tracked { width: 24px; height: 24px; font-size: 16px; }
+
+/* The profile and backup dialogs use the same reading sizes as the hall. */
+.home-page :is(.fish-profile-dialog, .save-backup-dialog) { width: min(540px, calc(100% - 28px)); max-height: calc(100dvh - 32px); padding: 30px 28px 24px; }
+.home-page :is(.fish-profile-story, .fish-profile-habit, .fish-profile-bond-story, .save-backup-dialog > p) { font-size: 16px; line-height: 1.75; }
+.home-page :is(.fish-profile-topline, .fish-profile-rarity, .fish-profile-bond-story > strong,
+  .fish-profile-friendship > div:first-child > span, .fish-profile-friendship > div:first-child > strong,
+  .fish-profile-friendship > small, .fish-profile-trophy > span, .fish-profile-trophy > small,
+  .fish-profile-length-top > span, .fish-profile-length > small, .fish-profile-track-row > small,
+  .fish-profile-count, .fish-profile-favorite-row > small, .fish-profile-favorite-status,
+  .save-dialog-kicker, .save-backup-dialog .save-dialog-warning, .save-backup-dialog .save-dialog-status) { font-size: 14px; line-height: 1.65; }
+.home-page :is(.fish-profile-story, .fish-profile-habit, .fish-profile-friendship > small,
+  .fish-profile-trophy > small, .fish-profile-length > small, .fish-profile-track-row > small,
+  .fish-profile-count, .fish-profile-favorite-row > small, .fish-profile-favorite-status,
+  .save-backup-dialog > p) { color: #586d60; }
+.home-page :is(.fish-profile-dialog h2, .save-backup-dialog h2) { font-size: 28px; line-height: 1.4; }
+.home-page :is(.fish-profile-trophy > strong, .fish-profile-length-top > strong) { font-size: 17px; }
+.home-page :is(.fish-profile-track, .fish-profile-favorite, .fish-profile-return, .save-dialog-actions button) { min-height: 46px; font-size: 16px; padding: 10px 14px; line-height: 1.5; }
+.home-page .fish-profile-close { top: 10px; right: 10px; width: 44px; height: 44px; font-size: 26px; }
+.home-page :is(.fish-profile-friendship > div:first-child, .fish-profile-length-top, .fish-profile-favorite-row) { flex-wrap: wrap; }
+.home-page .fish-profile-track-row { grid-template-columns: 1fr; }
+.home-page .fish-profile-favorite-row > small { white-space: normal; }
+.home-page .fish-profile-favorite-status { min-height: 24px; }
+.home-page .save-dialog-status { min-height: 44px; }
+.home-page .save-toast { font-size: 16px; line-height: 1.6; }
+
+@media (max-width: 620px) {
+  .home-page .site-header { width: calc(100% - 28px); height: auto; min-height: 80px; gap: 12px; flex-wrap: wrap; padding: 12px 0; }
+  .home-page .brand-name { font-size: 18px; }
+  .home-page .header-actions { gap: 8px; }
+  .home-page .intro-stamp { display: none; }
+  .home-page .game-grid { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .home-page .game-card { grid-template-columns: 76px minmax(0, 1fr); gap: 0 12px; padding: 16px; }
+  .home-page .card-art { width: 76px; }
+  .home-page .art-icon { font-size: 44px; }
+  .home-page .card-title { font-size: 22px; }
+  .home-page .journal-panel { padding: 20px 16px; }
+  .home-page .journal-heading h2 { font-size: 26px; }
+  .home-page :is(.daily-event, .daily-sighting, .daily-quest) { padding: 16px; }
+  .home-page .journal-daily-weather em { flex-basis: 100%; }
+  .home-page .daily-quest > p { flex-wrap: wrap; }
+  .home-page .daily-event-action { justify-self: start; white-space: normal; text-align: left; }
+  .home-page .fish-milestone-list { grid-template-columns: minmax(0, 1fr); }
+  .home-page .journal-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .home-page .journal-fish, .home-page .journal-fish[type="button"] { padding: 14px 8px; }
+  .home-page .aquarium-shop { padding: 16px; }
+  .home-page :is(.aquarium-decor-options, .cat-accessory-options) { grid-template-columns: minmax(0, 1fr); }
+  .home-page :is(.fish-profile-dialog, .save-backup-dialog) { padding: 32px 20px 20px; }
+  .home-page .save-dialog-actions { grid-template-columns: minmax(0, 1fr); }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
