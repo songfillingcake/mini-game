@@ -1,4 +1,4 @@
-export type GameId = 'fishing' | 'dodger' | 'jumper' | 'shells' | 'stacker' | 'autochess';
+export type GameId = 'fishing' | 'dodger' | 'jumper' | 'shells' | 'stacker' | 'autochess' | 'extraction';
 
 export interface GameControls {
   keys: ReadonlySet<string>;

@@ -17,6 +17,7 @@ const saveKeys = [
   shellGameBestKey,
   stackerGameBestKey,
   autoChessBestKey,
+  prefix + 'extraction',
   AUTO_CHESS_SAVE_KEY,
   soundKey,
   fishJournalKey,
@@ -90,19 +91,20 @@ export function setSoundEnabled(enabled: boolean): void {
 
 export function exportSaveBackup(): string {
   const data = Object.fromEntries(saveKeys.map((key) => [key, localStorage.getItem(key)]));
-  return JSON.stringify({ format: saveFormat, version: 4, exportedAt: new Date().toISOString(), data }, null, 2);
+  return JSON.stringify({ format: saveFormat, version: 5, exportedAt: new Date().toISOString(), data }, null, 2);
 }
 
 export function importSaveBackup(serialized: string): boolean {
   try {
     const parsed: unknown = JSON.parse(serialized);
-    if (!isObject(parsed) || parsed.format !== saveFormat || (parsed.version !== 1 && parsed.version !== 2 && parsed.version !== 3 && parsed.version !== 4) || !isObject(parsed.data)) return false;
+    if (!isObject(parsed) || parsed.format !== saveFormat || (parsed.version !== 1 && parsed.version !== 2 && parsed.version !== 3 && parsed.version !== 4 && parsed.version !== 5) || !isObject(parsed.data)) return false;
     const data = parsed.data;
     const keys = Object.keys(data);
     const expectedKeys = saveKeys.filter((key) => {
       if (parsed.version === 1 && key === shellGameBestKey) return false;
       if ((parsed.version === 1 || parsed.version === 2) && key === stackerGameBestKey) return false;
-      if (parsed.version !== 4 && (key === autoChessBestKey || key === AUTO_CHESS_SAVE_KEY)) return false;
+      if (parsed.version !== 4 && parsed.version !== 5 && (key === autoChessBestKey || key === AUTO_CHESS_SAVE_KEY)) return false;
+      if (parsed.version !== 5 && key === prefix + 'extraction') return false;
       return true;
     });
     if (keys.length !== expectedKeys.length || !expectedKeys.every((key) => Object.prototype.hasOwnProperty.call(data, key))) return false;

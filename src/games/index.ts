@@ -5,6 +5,7 @@ import { JumperGame } from './jumper/JumperGame';
 import { ShellMatchGame } from './shells/ShellMatchGame';
 import { CloudStackGame } from './stacker/CloudStackGame';
 import { AutoChessGame } from './autochess/AutoChessGame';
+import { ExtractionGame } from './extraction/ExtractionGame';
 
 export interface GameCardInfo {
   id: GameId;
@@ -18,6 +19,16 @@ export interface GameCardInfo {
 }
 
 export const gameCards: GameCardInfo[] = [
+  {
+    id: 'extraction',
+    title: '夺宝撤离',
+    subtitle: '带着宝物，活着回来',
+    description: '探索雾港遗迹，拾取会改变战局的宝物，甩开追兵，携宝返回撤离区。',
+    controls: 'WASD / 摇杆移动 · E 拾取 · 空格冲刺',
+    icon: '💎',
+    color: 'sky',
+    tag: '夺宝生存',
+  },
   {
     id: 'autochess',
     title: '星岛自走棋',
@@ -82,6 +93,7 @@ export const gameCards: GameCardInfo[] = [
 
 export function createGame(id: GameId): MiniGame {
   switch (id) {
+    case 'extraction': return new ExtractionGame();
     case 'autochess': return new AutoChessGame();
     case 'fishing': return new FishingGame();
     case 'dodger': return new DodgerGame();
