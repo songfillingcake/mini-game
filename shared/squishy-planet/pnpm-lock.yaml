@@ -1,0 +1,22 @@
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
+importers:
+
+  .:
+    dependencies:
+      '@pocket-play/engine':
+        specifier: file:../engine
+        version: file:../engine
+
+packages:
+
+  '@pocket-play/engine@file:../engine':
+    resolution: {directory: ../engine, type: directory}
+
+snapshots:
+
+  '@pocket-play/engine@file:../engine': {}

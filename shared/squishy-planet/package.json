@@ -1,0 +1,20 @@
+{
+  "name": "@pocket-play/squishy-planet",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "捏捏星球 · 平台无关的玩法核心",
+  "exports": {
+    ".": "./src/index.ts",
+    "./browser": "./src/browser.ts",
+    "./tools": "./tools/index.mjs"
+  },
+  "types": "./src/index.ts",
+  "dependencies": {
+    "@pocket-play/engine": "file:../engine"
+  },
+  "files": [
+    "src",
+    "tools"
+  ]
+}

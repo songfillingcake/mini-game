@@ -1,0 +1,4 @@
+# pnpm 设置放在这里（pnpm 11 起不再读取 package.json 的 "pnpm" 字段）。
+# 只允许 esbuild 执行安装脚本，其他依赖一律不跑 postinstall。
+onlyBuiltDependencies:
+  - esbuild

@@ -1,0 +1,3 @@
+# pnpm 设置（pnpm 11 起不再读 package.json 的 "pnpm" 字段）
+onlyBuiltDependencies:
+  - esbuild

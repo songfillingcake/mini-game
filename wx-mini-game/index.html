@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#1b1a2e" />
+    <meta name="description" content="捏捏星球：一款揉一揉就能放松的解压小游戏。" />
+    <title>捏捏星球 · Squishy Planet</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        background: #11101d;
+      }
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        overflow: hidden;
+        background: #11101d;
+        -webkit-tap-highlight-color: transparent;
+      }
+      body {
+        display: grid;
+        place-items: center;
+        touch-action: none;
+        overscroll-behavior: none;
+      }
+      #stage {
+        position: relative;
+        width: min(100vw, calc(100vh * 9 / 16));
+        height: min(100vh, calc(100vw * 16 / 9));
+        max-width: 520px;
+        max-height: 100vh;
+        overflow: hidden;
+        border-radius: 24px;
+        box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55);
+      }
+      #stage canvas {
+        display: block;
+        width: 100%;
+        height: 100%;
+        touch-action: none;
+      }
+      @media (max-width: 560px) {
+        #stage {
+          width: 100vw;
+          height: 100vh;
+          border-radius: 0;
+          box-shadow: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="stage"></div>
+    <script type="module" src="/src/entry/web.ts"></script>
+  </body>
+</html>

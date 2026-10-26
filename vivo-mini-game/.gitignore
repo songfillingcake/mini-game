@@ -1,0 +1,19 @@
+# 依赖与构建产物（子工程自管，不复用仓库根的 node_modules）
+node_modules/
+
+# 浏览器构建
+dist/
+
+# vivo 打包中间产物
+vivo/build/
+vivo/dist/
+vivo/.cache/
+
+# 由 npm run build 生成的运行时资源
+vivo/src/game.js
+vivo/src/js/
+vivo/src/audio/
+vivo/src/image/
+
+# 正式签名请勿入库
+vivo/sign/release/*.pem

@@ -1,0 +1,10 @@
+{
+  "name": "squishy-planet-vivo",
+  "private": true,
+  "version": "1.0.0",
+  "description": "vivo 小游戏运行时工程（由 npm run build 生成 src/game.js 与静态资源后交给 mgs 打包）",
+  "scripts": {
+    "build": "mg-service build",
+    "release": "mg-service release"
+  }
+}

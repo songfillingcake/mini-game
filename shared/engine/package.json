@@ -1,0 +1,24 @@
+{
+  "name": "@pocket-play/engine",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "口袋游乐场 · 平台无关的游戏引擎层（Host 契约、绘制工具、音频总线、构建期工具）",
+  "exports": {
+    ".": "./src/index.ts",
+    "./core/math": "./src/core/math.ts",
+    "./core/color": "./src/core/color.ts",
+    "./core/draw": "./src/core/draw.ts",
+    "./platform/types": "./src/platform/types.ts",
+    "./platform/web": "./src/platform/web.ts",
+    "./platform/wx": "./src/platform/wx.ts",
+    "./audio/innerAudio": "./src/audio/innerAudio.ts",
+    "./audio/webAudio": "./src/audio/webAudio.ts",
+    "./tools": "./tools/index.mjs"
+  },
+  "types": "./src/index.ts",
+  "files": [
+    "src",
+    "tools"
+  ]
+}

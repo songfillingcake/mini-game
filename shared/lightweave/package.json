@@ -1,0 +1,21 @@
+{
+  "name": "@pocket-play/lightweave",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "织光 · 微信小游戏（连线解谜）：从一端拖到另一端，把整块夜园点亮",
+  "exports": {
+    ".": "./src/index.ts",
+    "./browser": "./src/browser.ts"
+  },
+  "types": "./src/index.ts",
+  "scripts": {
+    "levels": "node tools/generate-levels.mjs"
+  },
+  "dependencies": {
+    "@pocket-play/engine": "file:../engine"
+  },
+  "files": [
+    "src"
+  ]
+}

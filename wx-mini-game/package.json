@@ -1,0 +1,23 @@
+{
+  "name": "wx-mini-game",
+  "private": true,
+  "version": "1.0.0",
+  "description": "捏捏星球 · 微信小游戏（平台工程，只放适配层与构建脚本）",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "check": "tsc --noEmit",
+    "build": "node scripts/build.mjs",
+    "smoke": "node scripts/smoke.mjs",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@pocket-play/engine": "file:../shared/engine",
+    "@pocket-play/squishy-planet": "file:../shared/squishy-planet"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0",
+    "typescript": "^5.9.0",
+    "vite": "^6.4.0"
+  }
+}
