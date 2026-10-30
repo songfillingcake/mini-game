@@ -1,4 +1,4 @@
-export type GameId = 'fishing' | 'dodger' | 'jumper' | 'shells' | 'stacker' | 'autochess' | 'extraction';
+export type GameId = 'fishing' | 'dodger' | 'jumper' | 'shells' | 'stacker' | 'autochess' | 'extraction' | 'breaker' | 'sokoban';
 
 export interface GameControls {
   keys: ReadonlySet<string>;
@@ -21,8 +21,11 @@ export interface MiniGame {
   readonly score: number;
   readonly statusText: string;
   readonly timeLeft?: number;
+  readonly modeLabel?: string;
   readonly over: boolean;
   readonly outcome: string;
+  readonly resultTitle?: string;
+  readonly resultSummary?: string;
   readonly setupOptions?: readonly GameSetupOption[];
   readonly selectedSetupOption?: string;
   readonly selectedSetupOptions?: Readonly<Record<string, string>>;

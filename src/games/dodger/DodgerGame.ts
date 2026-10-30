@@ -1,5 +1,7 @@
 import { clamp, drawText, HEIGHT, roundedRect, WIDTH } from '../../core/Game';
 import { audio } from '../../core/Audio';
+import { DodgeGuard } from './DodgeGuard';
+import { CourseWaves, type WaveSpawn } from './CourseWaves';
 import type { GameControls, GameSetupOption, MiniGame } from '../../core/Game';
 
 type DodgerRoute = 'stargazer' | 'steady' | 'close-call';
@@ -16,6 +18,7 @@ interface FallingThing {
   nearMissTimer: number;
   nearMissBonus: number;
   nearMissStreak: number;
+  wave?: number;
 }
 
 export class DodgerGame implements MiniGame {
@@ -40,12 +43,18 @@ export class DodgerGame implements MiniGame {
   private courseStage = 0;
   private courseFlash = 0;
   private route: DodgerRoute = 'stargazer';
+  private guard = new DodgeGuard();
+  private waves = new CourseWaves();
+  private waveFeedback = '';
+  private waveFlash = 0;
 
   get score(): number { return this.scoreValue; }
+  get resultTitle(): string { return this.elapsed >= 60 && this.lifeCount > 0 ? '跑完全程！' : '这次跑到了这里'; }
+  get resultSummary(): string { return `收集 ${this.stars} 星 · 险闪 ${this.nearMisses} 次 · 无伤穿门 ${this.waves.clean} 次`; }
   get timeLeft(): number { return Math.max(0, 60 - this.elapsed); }
   get over(): boolean { return this.ended; }
   get outcome(): string { return this.endText; }
-  get statusText(): string { return '❤ '.repeat(Math.max(0, this.lifeCount)).trim() + '　★ ' + this.stars + ' · ' + this.getCourseName(this.courseStage); }
+  get statusText(): string { return '❤ '.repeat(Math.max(0, this.lifeCount)).trim() + '　★ ' + this.stars + (this.guard.ready ? ' · 护盾就绪' : '') + ' · ' + this.getCourseName(this.courseStage); }
   get setupOptions(): readonly GameSetupOption[] {
     return [
       { id: 'stargazer', group: '路线徽章', icon: '⭐', label: '星星小径', detail: '星星更常出现，适合冲高分', unlocked: true },
@@ -78,11 +87,16 @@ export class DodgerGame implements MiniGame {
     this.endText = '再来一局，跑得更远！';
     this.courseStage = 0;
     this.courseFlash = 0;
+    this.guard = new DodgeGuard();
+    this.waves = new CourseWaves();
+    this.waveFeedback = ''; this.waveFlash = 0;
   }
 
   update(dt: number, controls: GameControls): void {
     if (this.ended) return;
     this.elapsed += dt;
+    this.guard.update(dt);
+    this.waveFlash = Math.max(0, this.waveFlash - dt);
     this.hitFlash = Math.max(0, this.hitFlash - dt);
     this.courseFlash = Math.max(0, this.courseFlash - dt);
     const reachedStage = this.getCourseStage();
@@ -97,8 +111,12 @@ export class DodgerGame implements MiniGame {
     this.playerX = clamp(this.playerX, 70, WIDTH - 70);
 
     const pace = 285 + this.elapsed * 4.2;
+    const previousWaveState = this.waves.state;
+    const wave = this.waves.update(this.elapsed);
+    if (previousWaveState !== 'warning' && this.waves.state === 'warning') audio.play('start');
+    for (const spawn of wave) this.spawnThing(spawn);
     this.spawnTimer -= dt;
-    if (this.spawnTimer <= 0) {
+    if (this.spawnTimer <= 0 && !this.waves.suppressTraffic) {
       this.spawnThing();
       this.spawnTimer = Math.max(0.34, 0.82 - this.elapsed * 0.004) + Math.random() * 0.2;
     }
@@ -120,12 +138,17 @@ export class DodgerGame implements MiniGame {
         thing.hit = true;
         if (thing.kind === 'star') {
           this.stars += 1;
+          this.guard.earn(1);
           this.starStreak += 1;
           this.bestStarStreak = Math.max(this.bestStarStreak, this.starStreak);
           this.bonusValue += Math.min(this.starStreak - 1, 5) * 5;
           audio.play('star');
         } else {
+          const previousBlocks = this.guard.blocks;
+          if (this.guard.absorb()) { if (this.guard.blocks > previousBlocks) audio.play('unlock'); continue; }
           this.lifeCount -= 1;
+          if (this.waves.state === 'active') this.waves.damaged = true;
+          this.guard.grace = .8;
           this.starStreak = 0;
           this.nearMissStreak = 0;
           this.hitFlash = 0.35;
@@ -141,6 +164,7 @@ export class DodgerGame implements MiniGame {
         thing.nearMissed = true;
         thing.nearMissTimer = 0.65;
         this.nearMisses += 1;
+        this.guard.earn(2);
         this.nearMissStreak += 1;
         this.bestNearMissStreak = Math.max(this.bestNearMissStreak, this.nearMissStreak);
         thing.nearMissBonus = 15 + Math.min(this.nearMissStreak - 1, 4) * 5 + (this.route === 'close-call' ? 10 : 0);
@@ -150,6 +174,14 @@ export class DodgerGame implements MiniGame {
       }
     }
     this.things = this.things.filter((thing) => thing.y < HEIGHT + 90 && !thing.hit);
+    if (!this.ended && this.waves.state === 'active' && !this.things.some(thing => thing.wave === this.waves.index)) {
+      const bonus = this.waves.finish();
+      if (bonus > 0) {
+        this.bonusValue += bonus; this.guard.earn(2);
+        this.waveFeedback = '无伤穿门！+' + bonus; audio.play('unlock');
+      } else this.waveFeedback = '穿门完成 · 下次争取无伤';
+      this.waveFlash = 2; this.spawnTimer = .7;
+    }
     this.scoreValue = Math.floor(this.elapsed * 8) + this.stars * 25 + this.bonusValue;
     if (this.elapsed >= 60 && !this.ended) {
       this.elapsed = 60;
@@ -212,8 +244,26 @@ export class DodgerGame implements MiniGame {
       ctx.restore();
     }
 
+    if (this.waves.state === 'warning') {
+      const guide = this.waves.preview;
+      ctx.save(); ctx.fillStyle = 'rgba(235,249,192,.18)'; roundedRect(ctx, guide.x - 40, 130, 80, 320, 20); ctx.fill();
+      ctx.strokeStyle = '#f6edb2'; ctx.lineWidth = 3; ctx.setLineDash([9, 9]); ctx.beginPath(); ctx.moveTo(guide.x, 145); ctx.lineTo(guide.x, 400); ctx.stroke(); ctx.restore();
+    }
     for (const thing of this.things) this.drawThing(ctx, thing);
     this.drawRunner(ctx, this.playerX, 430, now);
+    if (this.guard.ready || this.guard.flash > 0) {
+      ctx.save();
+      ctx.globalAlpha = this.guard.flash > 0 ? Math.min(1, this.guard.flash * 2) : .7;
+      ctx.strokeStyle = this.guard.flash > 0 ? '#fff1a9' : '#b8fff0'; ctx.lineWidth = 5;
+      ctx.beginPath(); ctx.ellipse(this.playerX, 420, 52 + this.guard.flash * 20, 57 + this.guard.flash * 20, 0, 0, Math.PI * 2); ctx.stroke();
+      ctx.restore();
+    }
+    ctx.fillStyle = 'rgba(22,55,57,.85)'; roundedRect(ctx, 92, 482, 250, 40, 15); ctx.fill();
+    drawText(ctx, this.guard.flash > 0 ? '护盾挡住了撞击！' : this.guard.ready ? '护盾就绪 · 自动抵挡一次' : '护盾 ' + this.guard.charge + '/6 · 捡星 / 险闪充能', 217, 502, 13, '#e3f7db', 800);
+    if (this.waves.state !== 'idle' || this.waveFlash > 0) {
+      ctx.fillStyle = 'rgba(22,55,57,.9)'; roundedRect(ctx, 600, 482, 285, 40, 15); ctx.fill();
+      drawText(ctx, this.waves.state === 'warning' ? this.waves.preview.label : this.waves.state === 'active' ? '跟随星星缺口 · 无伤有奖励' : this.waveFeedback, 742, 502, 14, '#ffe7b4', 800);
+    }
     if (this.hitFlash > 0) {
       ctx.fillStyle = 'rgba(239,93,90,' + (this.hitFlash * 0.24) + ')';
       ctx.fillRect(0, 0, WIDTH, HEIGHT);
@@ -237,14 +287,14 @@ export class DodgerGame implements MiniGame {
     }
   }
 
-  private spawnThing(): void {
+  private spawnThing(spawn?: WaveSpawn): void {
     const starChance = this.route === 'stargazer' ? 0.36 : this.route === 'steady' ? 0.16 : 0.24;
     const isStar = Math.random() < starChance;
     this.things.push({
-      x: 135 + Math.random() * 690,
-      y: -50,
-      kind: isStar ? 'star' : Math.random() < 0.5 ? 'rock' : 'cone',
-      size: isStar ? 18 : 24 + Math.random() * 6,
+      x: spawn?.x ?? 135 + Math.random() * 690,
+      y: spawn?.y ?? -50,
+      kind: spawn?.kind ?? (isStar ? 'star' : Math.random() < 0.5 ? 'rock' : 'cone'),
+      size: spawn ? spawn.kind === 'star' ? 18 : 26 : isStar ? 18 : 24 + Math.random() * 6,
       spin: Math.random() * 3,
       hit: false,
       missed: false,
@@ -252,13 +302,14 @@ export class DodgerGame implements MiniGame {
       nearMissTimer: 0,
       nearMissBonus: 0,
       nearMissStreak: 0,
+      wave: spawn?.wave,
     });
   }
 
   private getRunSummary(prefix: string): string {
     const streak = this.bestStarStreak > 0 ? '最长连星 x' + this.bestStarStreak : '还没连起星星';
     const dodgeStreak = this.bestNearMissStreak > 0 ? '最长连躲 x' + this.bestNearMissStreak : '还没连起贴边闪避';
-    return prefix + '选择' + this.getRouteName() + '，到达' + this.getCourseName(this.courseStage) + '，收集 ' + this.stars + ' 颗星，贴边闪过 ' + this.nearMisses + ' 次，' + streak + '，' + dodgeStreak;
+    return prefix + '选择' + this.getRouteName() + '，到达' + this.getCourseName(this.courseStage) + '，收集 ' + this.stars + ' 颗星，贴边闪过 ' + this.nearMisses + ' 次，' + streak + '，' + dodgeStreak + '，护盾抵挡 ' + this.guard.blocks + ' 次，无伤穿门 ' + this.waves.clean + ' 次';
   }
 
   private getCollisionPadding(): number {

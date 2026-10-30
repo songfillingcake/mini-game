@@ -6,6 +6,8 @@ import { ShellMatchGame } from './shells/ShellMatchGame';
 import { CloudStackGame } from './stacker/CloudStackGame';
 import { AutoChessGame } from './autochess/AutoChessGame';
 import { ExtractionGame } from './extraction/ExtractionGame';
+import { BreakerGame } from './breaker/BreakerGame';
+import { SokobanGame } from './sokoban/SokobanGame';
 
 export interface GameCardInfo {
   id: GameId;
@@ -19,6 +21,16 @@ export interface GameCardInfo {
 }
 
 export const gameCards: GameCardInfo[] = [
+  {
+    id: 'sokoban', title: '推箱小岛', subtitle: '一步一步，把小岛点亮',
+    description: '五组地图与镜像挑战，可撤回、重置；绕开石墙，把每个箱子推到目标格。',
+    controls: '方向键 / WASD · 点相邻格 · 空格撤回', icon: '📦', color: 'mint', tag: '空间解谜',
+  },
+  {
+    id: 'breaker', title: '弹珠远征', subtitle: '反弹弹珠，突破六道星门',
+    description: '爆破砖连锁、装甲砖和分裂弹珠；六关之间选择升级，击碎黯星之核。',
+    controls: '← → / 拖动挡板 · 点击或空格发射', icon: '🔮', color: 'lilac', tag: '反弹闯关',
+  },
   {
     id: 'extraction',
     title: '夺宝撤离',
@@ -93,6 +105,8 @@ export const gameCards: GameCardInfo[] = [
 
 export function createGame(id: GameId): MiniGame {
   switch (id) {
+    case 'sokoban': return new SokobanGame();
+    case 'breaker': return new BreakerGame();
     case 'extraction': return new ExtractionGame();
     case 'autochess': return new AutoChessGame();
     case 'fishing': return new FishingGame();

@@ -1,10 +1,14 @@
 import { clamp, drawText, HEIGHT, roundedRect, WIDTH } from '../../core/Game';
 import { audio } from '../../core/Audio';
+import { LandingRhythm } from './LandingRhythm';
+import { estimateLandings } from './LandingGuide';
+import { composePlatform } from './RouteComposer';
 import type { GameControls, GameSetupOption, MiniGame } from '../../core/Game';
 
 type JumperRoute = 'star-chaser' | 'spring-rider' | 'steady-climb';
 
 interface Platform {
+  segment?: string;
   x: number;
   y: number;
   width: number;
@@ -40,8 +44,13 @@ export class JumperGame implements MiniGame {
   private skyStage = 0;
   private skyStageFlash = 0;
   private route: JumperRoute = 'star-chaser';
+  private rhythm = new LandingRhythm();
+  private generatedPlatforms = 0;
+  private routeSegment = '';
+  private segmentFlash = 0;
 
   get score(): number { return this.scoreValue; }
+  get resultSummary(): string { return `登高 ${this.getAltitude()} 米 · 收集 ${this.starsCollected} 星 · 精准连落最高 x${this.rhythm.best}`; }
   get over(): boolean { return this.ended; }
   get setupOptions(): readonly GameSetupOption[] {
     return [
@@ -56,7 +65,7 @@ export class JumperGame implements MiniGame {
   }
   get outcome(): string {
     const streak = this.bestStarStreak > 0 ? '最高连星 x' + this.bestStarStreak : '还没踩中星星';
-    return '走' + this.getRouteName() + '，爬到 ' + this.getAltitude() + ' 米高，收集 ' + this.starsCollected + ' 颗星，' + streak + '，总得分 ' + this.scoreValue;
+    return '走' + this.getRouteName() + '，爬到 ' + this.getAltitude() + ' 米高，收集 ' + this.starsCollected + ' 颗星，' + streak + '，精准连落最高 x' + this.rhythm.best + '，救援 ' + this.rhythm.rescues + ' 次，总得分 ' + this.scoreValue;
   }
   get statusText(): string { return '高度 ' + this.getAltitude() + 'm　★ ' + this.starsCollected + (this.starStreak > 1 ? ' · 连星 x' + this.starStreak : ''); }
 
@@ -84,11 +93,15 @@ export class JumperGame implements MiniGame {
     this.bestStarStreak = 0;
     this.skyStage = 0;
     this.skyStageFlash = 0;
+    this.rhythm = new LandingRhythm();
+    this.generatedPlatforms = 0; this.routeSegment = ''; this.segmentFlash = 0;
     this.createPlatformsAbove();
   }
 
   update(dt: number, controls: GameControls): void {
     if (this.ended) return;
+    this.rhythm.flash = Math.max(0, this.rhythm.flash - dt);
+    this.segmentFlash = Math.max(0, this.segmentFlash - dt);
     const direction = Number(controls.keys.has('right')) - Number(controls.keys.has('left'));
     this.playerX += direction * 360 * dt;
     if (controls.pointerX !== null) this.playerX += clamp(controls.pointerX - this.playerX, -470 * dt, 470 * dt);
@@ -118,6 +131,8 @@ export class JumperGame implements MiniGame {
         const crossed = this.previousY + 22 <= platform.y && this.playerY + 22 >= platform.y;
         const overlaps = this.playerX + 19 >= platform.x && this.playerX - 19 <= platform.x + platform.width;
         if (crossed && overlaps) {
+          if (platform.segment && platform.segment !== this.routeSegment) { this.routeSegment = platform.segment; this.segmentFlash = 1.8; }
+          this.bonus += this.rhythm.land(this.playerX, platform);
           this.playerY = platform.y - 22;
           this.velocityY = platform.spring ? this.route === 'spring-rider' ? -940 : -860 : -680;
           if (platform.spring) {
@@ -154,6 +169,14 @@ export class JumperGame implements MiniGame {
       audio.play('unlock');
     }
 
+    if (this.playerY - this.cameraY > HEIGHT + 20 && this.rhythm.ready) {
+      this.rhythm.rescue();
+      this.playerY = this.cameraY + HEIGHT - 80;
+      this.previousY = this.playerY;
+      this.velocityY = -820;
+      this.starStreak = 0;
+      audio.play('spring');
+    }
     if (this.playerY - this.cameraY > HEIGHT + 60) this.ended = true;
   }
 
@@ -206,13 +229,23 @@ export class JumperGame implements MiniGame {
 
     for (const platform of this.platforms) this.drawPlatform(ctx, platform);
     this.drawPlayer(ctx, this.playerX, this.playerY - this.cameraY, now);
+    if (this.rhythm.flash > 0 && this.rhythm.message.includes('救援')) {
+      ctx.save(); ctx.globalAlpha = Math.min(1, this.rhythm.flash);
+      ctx.fillStyle = '#fff5d7'; ctx.beginPath(); ctx.ellipse(this.playerX, this.playerY - this.cameraY + 31, 54, 14, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+    }
     const titleColor = stage >= 2 ? '#fff0bd' : stage === 1 ? '#354f70' : '#355b5a';
     const hintColor = stage >= 2 ? 'rgba(255,246,218,.84)' : '#547a77';
     drawText(ctx, '踩住平台一直往上跳，别掉下去', WIDTH / 2, 42, 18, titleColor, 800);
     drawText(ctx, '本局路线 · ' + this.getRouteName(), WIDTH / 2, 69, 12, hintColor, 800);
+    ctx.fillStyle = 'rgba(255,255,255,.83)'; roundedRect(ctx, 32, 105, 230, 48, 14); ctx.fill();
+    drawText(ctx, this.rhythm.flash > 0 ? this.rhythm.message : this.rhythm.ready ? '救援云已就绪 · 掉落时接住你' : '精准落点 ' + this.rhythm.charge + '/3 · 积攒救援云', 147, 129, 12, '#45635e', 800);
     if (this.starStreak > 1) drawText(ctx, '连星 x' + this.starStreak + ' · 下一颗 +' + Math.min(this.starStreak, 5) * 12, 165, 76, 13, stage >= 2 ? '#fff0bd' : '#426b64', 900);
     drawText(ctx, '横移平台记得提前踩稳 · 裂纹平台只够踩一次 · 星星加分', WIDTH / 2, 514, 13, hintColor, 600);
     this.drawUpcomingPlatforms(ctx);
+    if (this.segmentFlash > 0) {
+      ctx.save(); ctx.globalAlpha = Math.min(1, this.segmentFlash); ctx.fillStyle = 'rgba(255,255,255,.84)'; roundedRect(ctx, 340, 103, 280, 32, 14); ctx.fill();
+      drawText(ctx, this.routeSegment, WIDTH / 2, 119, 16, '#45635e', 800); ctx.restore();
+    }
     if (this.skyStageFlash > 0) {
       ctx.save();
       ctx.globalAlpha = Math.min(1, this.skyStageFlash);
@@ -233,18 +266,18 @@ export class JumperGame implements MiniGame {
   }
 
   private drawUpcomingPlatforms(ctx: CanvasRenderingContext2D): void {
-    const rising = this.velocityY < 0;
-    const upcoming = this.platforms
-      .filter((platform) => !platform.broken && (rising ? platform.y < this.playerY - 12 : platform.y > this.playerY + 12))
-      .sort((a, b) => rising ? b.y - a.y : a.y - b.y)
-      .slice(0, 3);
+    const estimates = estimateLandings(this.platforms, this.playerX, this.playerY, this.velocityY);
+    const recommended = estimates.find(estimate => estimate.reachable);
+    const upcoming = estimates.slice(0, 3);
+    // Keep at least one reachable option visible when the nearest three are risky.
+    if (recommended && !upcoming.includes(recommended)) upcoming[upcoming.length - 1] = recommended;
 
     ctx.fillStyle = 'rgba(255,255,255,.76)';
     roundedRect(ctx, 770, 88, 166, 110, 14);
     ctx.fill();
-    drawText(ctx, rising ? '↑ 上升路线' : '↓ 下落落点', 853, 103, 12, '#45635e', 900);
+    drawText(ctx, '↓ 落点预估', 853, 103, 12, '#45635e', 900);
 
-    upcoming.forEach((platform, index) => {
+    upcoming.forEach(({ platform, time, reachable, x }, index) => {
       const label = platform.hasStar
         ? platform.collected ? '✓ 星星已取' : '⭐ 星星'
         : platform.spring ? '↟ 弹簧'
@@ -262,9 +295,20 @@ export class JumperGame implements MiniGame {
       ctx.fillStyle = color;
       roundedRect(ctx, 782, y - 9, 142, 20, 10);
       ctx.fill();
-      drawText(ctx, (index + 1) + '  ' + label, 853, y + 1, 11, '#3f5d58', 800);
+      drawText(ctx, (reachable ? '✓ ' : '! ') + label + ' ' + time.toFixed(1) + 's', 853, y + 1, 11, reachable ? '#3f5d58' : '#a26548', 800);
+      const py = platform.y - this.cameraY;
+      if (recommended?.platform === platform && py > 215 && py < HEIGHT - 65) {
+        ctx.save(); ctx.strokeStyle = '#fff0ad'; ctx.lineWidth = 3;
+        roundedRect(ctx, x - 3, py - 3, platform.width + 6, 25, 11); ctx.stroke();
+        drawText(ctx, '建议落点', x + platform.width / 2, py + 37, 12, this.getSkyStage() >= 2 ? '#fff0ad' : '#426b64', 800);
+        ctx.restore();
+      }
+      if (platform.moving && py > 160 && py < HEIGHT - 35) {
+        ctx.save(); ctx.strokeStyle = reachable ? '#f6ecc0' : '#f1ad8d'; ctx.globalAlpha = .7; ctx.lineWidth = 2; ctx.setLineDash([5, 5]);
+        roundedRect(ctx, x, py, platform.width, 19, 9); ctx.stroke(); ctx.restore();
+      }
     });
-    if (upcoming.length === 0) drawText(ctx, '前方平台生成中', 853, 147, 11, '#607b77', 700);
+    if (upcoming.length === 0) drawText(ctx, '留意下方平台', 853, 147, 11, '#607b77', 700);
   }
 
   private createPlatformsAbove(): void {
@@ -272,16 +316,18 @@ export class JumperGame implements MiniGame {
     let previousCenter = previous ? previous.x + previous.width / 2 : WIDTH / 2;
     const stage = this.getSkyStage();
     while (this.topPlatformY > this.cameraY - 180) {
+      const plan = composePlatform(this.generatedPlatforms++, this.route);
       const gap = 82 + stage * 4 + Math.random() * (24 + stage * 5);
       this.topPlatformY -= gap;
       const width = this.getRoutePlatformWidth(112 - stage * 6 + Math.random() * (44 - stage * 7));
       const platformWidth = width;
-      const routeCenter = clamp(previousCenter + (Math.random() - 0.5) * 420, 48 + platformWidth / 2, WIDTH - 48 - platformWidth / 2);
+      const routeCenter = clamp(previousCenter + plan.delta, 48 + platformWidth / 2, WIDTH - 48 - platformWidth / 2);
       const x = routeCenter - platformWidth / 2;
-      const spring = Math.random() < (this.route === 'spring-rider' ? 0.29 : 0.14);
-      const moving = !spring && (!this.hasShownMovingPlatform || Math.random() < 0.2 + stage * 0.06);
+      const spring = plan.spring ?? Math.random() < (this.route === 'spring-rider' ? .29 : .14);
+      const moving = !spring && (plan.moving ?? (!this.hasShownMovingPlatform || Math.random() < .2 + stage * .06));
       if (moving) this.hasShownMovingPlatform = true;
       this.platforms.push({
+        segment: plan.label,
         x,
         y: this.topPlatformY,
         width: platformWidth,
@@ -289,9 +335,9 @@ export class JumperGame implements MiniGame {
         moving,
         moveSpeed: moving ? 70 + Math.random() * 45 : 0,
         moveDirection: Math.random() < 0.5 ? -1 : 1,
-        fragile: !spring && !moving && Math.random() < 0.13 + stage * 0.05,
+        fragile: !spring && !moving && (plan.fragile ?? Math.random() < .13 + stage * .05),
         broken: false,
-        hasStar: Math.random() < this.getStarChance(),
+        hasStar: plan.hasStar ?? Math.random() < this.getStarChance(),
         collected: false,
       });
       previousCenter = routeCenter;
@@ -310,6 +356,9 @@ export class JumperGame implements MiniGame {
     ctx.fillStyle = platform.spring ? '#ffc38e' : platform.moving ? '#c4c8ed' : platform.fragile ? '#e9b39a' : normalHighlight;
     roundedRect(ctx, platform.x + 4, y + 2, platform.width - 8, 7, 5);
     ctx.fill();
+    const targetWidth = Math.min(36, platform.width * .3);
+    ctx.fillStyle = 'rgba(255,248,204,.8)';
+    ctx.fillRect(platform.x + (platform.width - targetWidth) / 2, y + 2, targetWidth, 5);
     if (platform.fragile) {
       ctx.strokeStyle = 'rgba(112,66,57,.72)';
       ctx.lineWidth = 2;

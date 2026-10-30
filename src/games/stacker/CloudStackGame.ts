@@ -1,4 +1,7 @@
 import { audio } from '../../core/Audio';
+import { cloudWind } from './WindCycle';
+import { SkyBlueprint } from './SkyBlueprint';
+import { cloudPlacement } from './Placement';
 import { clamp, drawText, HEIGHT, roundedRect, WIDTH } from '../../core/Game';
 import type { GameControls, GameSetupOption, MiniGame } from '../../core/Game';
 
@@ -39,12 +42,22 @@ export class CloudStackGame implements MiniGame {
   private feedbackTime = 2;
   private endReason = '';
   private settleFlash = 0;
+  private gustPerfects = 0;
+  private objective: 'endless' | 'blueprint' = 'endless';
+  private runObjective: 'endless' | 'blueprint' = 'endless';
+  private blueprint = new SkyBlueprint();
 
   constructor() {
     this.resetRun();
   }
 
   get score(): number { return this.scoreValue; }
+  get resultTitle(): string | undefined {
+    if (this.runObjective !== 'blueprint') return undefined;
+    return this.blueprint.completed === 3 ? '天际蓝图完工！' : '蓝图挑战结束';
+  }
+  get resultSummary(): string { return `叠起 ${this.layers} 层 · 完美 ${this.perfects} 次 · 最高连击 x${this.bestStreak}` + (this.runObjective === 'blueprint' ? ` · 蓝图 ${this.blueprint.completed}/3` : ''); }
+  get modeLabel(): string { return this.runObjective === 'blueprint' ? '天际蓝图' : '无尽'; }
   get over(): boolean { return this.ended; }
   get statusText(): string {
     return this.layers + ' 层' + (this.streak > 1 ? ' · 完美 x' + this.streak : ' · ' + this.getRouteName());
@@ -52,17 +65,25 @@ export class CloudStackGame implements MiniGame {
   get outcome(): string {
     const recovery = this.recoveries > 0 ? '，让云朵重新变宽 ' + this.recoveries + ' 次' : '';
     return '沿' + this.getRouteName(this.runRoute) + '叠起 ' + this.layers + ' 层，抵达' + skyNames[this.getSkyStage()] +
-      '，完美对齐 ' + this.perfects + ' 次，最高连击 x' + this.bestStreak + recovery + '。' + this.endReason;
+      '，完美对齐 ' + this.perfects + ' 次，最高连击 x' + this.bestStreak + recovery + (this.gustPerfects ? '，阵风完美 ' + this.gustPerfects + ' 次' : '') + (this.runObjective === 'blueprint' ? '，完成蓝图 ' + this.blueprint.completed + '/3 段' : '') + '。' + this.endReason;
   }
   get setupOptions(): readonly GameSetupOption[] {
     return [
       { id: 'soft-cloud', group: '节奏', icon: '☁️', label: '软云慢游', detail: '云块宽、移动慢，适合练习对齐；三连完美恢复更多云宽', unlocked: true },
-      { id: 'wind-tower', group: '节奏', icon: '🍃', label: '风之高塔', detail: '云块略窄、移动更快；每层与完美对齐的分数更高', unlocked: true },
+      { id: 'wind-tower', group: '节奏', icon: '🍃', label: '风之高塔', detail: '阵风来前会预警；顶风完美落点额外加分', unlocked: true },
+      { id: 'endless', group: '目标', icon: '☁️', label: '无尽叠塔', detail: '保持原玩法，挑战更高层数', unlocked: true },
+      { id: 'blueprint', group: '目标', icon: '🏗️', label: '天际蓝图', detail: '8 / 16 / 24 层保住指定云宽，完成三段建筑', unlocked: true },
     ];
   }
   get selectedSetupOption(): string { return this.route; }
+  get selectedSetupOptions(): Readonly<Record<string, string>> { return { 节奏: this.route, 目标: this.objective }; }
 
   selectSetupOption(id: string): void {
+    if (id === 'endless' || id === 'blueprint') {
+      this.objective = id;
+      if (!this.started) this.resetRun();
+      return;
+    }
     if (id !== 'soft-cloud' && id !== 'wind-tower') return;
     this.route = id;
     if (!this.started) this.resetRun();
@@ -75,6 +96,8 @@ export class CloudStackGame implements MiniGame {
 
   private resetRun(): void {
     this.runRoute = this.route;
+    this.runObjective = this.objective;
+    this.blueprint = new SkyBlueprint();
     const width = this.getStartingWidth();
     this.blocks = [{ x: (WIDTH - width) / 2, y: BASE_Y, width, layer: 0 }];
     this.fragments = [];
@@ -95,6 +118,7 @@ export class CloudStackGame implements MiniGame {
     this.feedbackTime = 2;
     this.endReason = '';
     this.settleFlash = 0;
+    this.gustPerfects = 0;
     this.spawnBlock();
   }
 
@@ -133,7 +157,8 @@ export class CloudStackGame implements MiniGame {
       ? Math.min(340, 145 + this.layers * 8)
       : Math.min(440, 205 + this.layers * 11);
     const range = WIDTH - 160 - this.active.width;
-    this.active.travel += speed * dt;
+    const wind = this.route === 'wind-tower' ? cloudWind(this.elapsed).speed : 1;
+    this.active.travel += speed * wind * dt;
     const phase = this.active.travel % (range * 2);
     this.active.x = 80 + (phase <= range ? phase : range * 2 - phase);
     this.active.direction = phase < range ? 1 : -1;
@@ -147,13 +172,9 @@ export class CloudStackGame implements MiniGame {
     if (!this.started || this.ended || this.endingTimer >= 0 || this.placementCooldown > 0 || !this.active) return;
     const target = this.blocks[this.blocks.length - 1];
     const moving = this.active;
-    const perfect = Math.abs(moving.x - target.x) <= this.getPerfectTolerance();
-    let left = Math.max(moving.x, target.x);
-    let width = Math.min(moving.x + moving.width, target.x + target.width) - left;
-    if (perfect) {
-      left = target.x;
-      width = target.width;
-    }
+    const placement = cloudPlacement(moving, target, this.getPerfectTolerance());
+    const perfect = placement.perfect;
+    let { left, width } = placement;
     if (width < MIN_WIDTH) {
       this.addFragment(moving.x, moving.width, moving, moving.direction);
       this.active = null;
@@ -173,6 +194,7 @@ export class CloudStackGame implements MiniGame {
       this.streak += 1;
       this.bestStreak = Math.max(this.bestStreak, this.streak);
       points += (this.route === 'soft-cloud' ? 4 : 6) * Math.min(8, this.streak);
+      if (this.route === 'wind-tower' && cloudWind(this.elapsed).phase === 'gust') { points += 15; this.gustPerfects++; }
       if (this.streak % 3 === 0) {
         restored = Math.min(this.getStartingWidth() - width, this.route === 'soft-cloud' ? 24 : 16);
         left -= restored / 2;
@@ -202,6 +224,21 @@ export class CloudStackGame implements MiniGame {
       this.feedback = '抵达' + skyNames[this.getSkyStage()] + '！继续向上吧';
       this.feedbackTime = 2.2;
       audio.play('unlock');
+    }
+    if (this.runObjective === 'blueprint') {
+      const report = this.blueprint.inspect(this.layers, width, this.getStartingWidth());
+      if (report.result !== 'none') {
+        this.scoreValue += report.reward;
+        this.feedback = report.result === 'fail' ? report.name + ' · 云宽不足' : report.name + '完成！+' + report.reward;
+        this.feedbackTime = 2;
+        if (report.result === 'fail' || report.result === 'complete') {
+          this.active = null; this.endingTimer = 1.2;
+          this.endReason = report.result === 'complete' ? '天际蓝图全部完工！' : '这段蓝图需要更宽的云朵，试试利用三连完美修复。';
+          audio.play(report.result === 'complete' ? 'unlock' : 'miss');
+          return;
+        }
+        audio.play('unlock');
+      }
     }
     this.spawnBlock();
   }
@@ -315,7 +352,18 @@ export class CloudStackGame implements MiniGame {
       this.drawBlock(ctx, block.x, y, block.width, block.layer, false);
       ctx.restore();
     }
-    if (this.active) this.drawBlock(ctx, this.active.x, this.active.y + this.cameraOffset, this.active.width, this.active.layer, true);
+    if (this.active) {
+      const active = this.active, y = active.y + this.cameraOffset;
+      this.drawBlock(ctx, active.x, y, active.width, active.layer, true);
+      const preview = cloudPlacement(active, target, this.getPerfectTolerance());
+      if (!preview.perfect && this.placementCooldown === 0) {
+        ctx.save(); roundedRect(ctx, active.x, y, active.width, BLOCK_HEIGHT, Math.min(10, active.width / 3)); ctx.clip();
+        ctx.fillStyle = 'rgba(204,99,104,.4)'; ctx.fillRect(active.x, y, active.width, BLOCK_HEIGHT);
+        if (preview.width > 0) { ctx.fillStyle = 'rgba(225,249,192,.8)'; ctx.fillRect(preview.left, y, preview.width, BLOCK_HEIGHT); }
+        ctx.restore();
+        drawText(ctx, preview.width > 0 ? '将保留云宽 ' + Math.round(preview.width / this.getStartingWidth() * 100) + '%' : '尚未重叠 · 再等一下', active.x + active.width / 2, y - 18, 15, palette.ink, 800);
+      }
+    }
     for (const piece of this.fragments) {
       ctx.save();
       ctx.globalAlpha = clamp(piece.life / 0.5, 0, 1);
@@ -340,6 +388,18 @@ export class CloudStackGame implements MiniGame {
     drawText(ctx, '完美 ' + this.perfects + ' 次', WIDTH - 48, 38, 15, palette.soft, 700, 'right');
     drawText(ctx, this.streak > 0 ? '完美连击 x' + this.streak : '等待完美对齐', WIDTH - 48, 60, 16, palette.ink, 800, 'right');
     if (this.feedbackTime > 0) drawText(ctx, this.feedback, WIDTH / 2, 109, 19, palette.ink, 800);
+    if (this.route === 'wind-tower') {
+      const wind = cloudWind(this.elapsed);
+      const text = wind.phase === 'warning' ? '阵风将至 · 留意加速' : wind.phase === 'gust' ? '阵风中 · 完美额外 +15' : '风平 · ' + Math.ceil(wind.remaining) + ' 秒后预警';
+      ctx.fillStyle = stage === 2 ? 'rgba(21,35,62,.88)' : 'rgba(255,255,255,.86)';
+      roundedRect(ctx, 342, 132, 276, 34, 14); ctx.fill();
+      drawText(ctx, text, WIDTH / 2, 149, 15, palette.ink, 800);
+      if (wind.phase === 'gust') {
+        ctx.save(); ctx.strokeStyle = stage === 2 ? '#e7f5ff' : '#719caa'; ctx.globalAlpha = .35; ctx.lineWidth = 2;
+        for (let i = 0; i < 6; i++) { const x = (this.elapsed * 280 + i * 177) % (WIDTH + 140) - 140; const y = 190 + i * 37; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + 70, y); ctx.stroke(); }
+        ctx.restore();
+      }
+    }
     const remainingWidth = Math.round(target.width / this.getStartingWidth() * 100);
     const hint = this.streak > 0
       ? '再完美 ' + (3 - this.streak % 3) + ' 次，云朵就能长宽一点'
@@ -347,8 +407,16 @@ export class CloudStackGame implements MiniGame {
     ctx.fillStyle = stage === 2 ? 'rgba(21,35,62,.9)' : 'rgba(255,255,255,.93)';
     roundedRect(ctx, 24, 466, WIDTH - 48, 66, 18);
     ctx.fill();
-    drawText(ctx, '云宽 ' + remainingWidth + '% · ' + hint, WIDTH / 2, 488, 16, palette.ink, 800);
-    drawText(ctx, '点击画面 / 按空格落下 · 只保留与下层重叠的部分', WIDTH / 2, 516, 15, palette.soft, 700);
+    const next = this.runObjective === 'blueprint' ? this.blueprint.next : undefined;
+    const objectiveHint = next ? `蓝图 ${this.blueprint.completed + 1}/3 · 第 ${next.layer} 层需云宽 ≥${Math.round(next.ratio * 100)}%` : this.runObjective === 'blueprint' ? '蓝图全部完工' : hint;
+    drawText(ctx, '云宽 ' + remainingWidth + '% · ' + objectiveHint, WIDTH / 2, this.runObjective === 'blueprint' ? 484 : 488, 16, palette.ink, 800);
+    if (this.runObjective === 'blueprint') {
+      const barX = 300, barWidth = 360, ratio = target.width / this.getStartingWidth();
+      ctx.fillStyle = stage === 2 ? '#34496b' : '#dce8db'; roundedRect(ctx, barX, 498, barWidth, 7, 3); ctx.fill();
+      ctx.fillStyle = next && ratio < next.ratio ? '#dc9d79' : '#8fbb96'; roundedRect(ctx, barX, 498, barWidth * clamp(ratio, 0, 1), 7, 3); ctx.fill();
+      if (next) { ctx.fillStyle = stage === 2 ? '#ffe5ae' : '#9c7439'; ctx.fillRect(barX + barWidth * next.ratio - 1.5, 494, 3, 15); }
+      drawText(ctx, next && ratio < next.ratio ? '低于刻度 · 三连完美可修复云宽' : '刻度为下一段所需云宽', WIDTH / 2, 520, 13, palette.soft, 700);
+    } else drawText(ctx, '点击画面 / 按空格落下 · 只保留与下层重叠的部分', WIDTH / 2, 516, 15, palette.soft, 700);
   }
 
   private drawCloud(ctx: CanvasRenderingContext2D, x: number, y: number, scale: number, opacity: number): void {

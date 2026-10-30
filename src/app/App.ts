@@ -315,7 +315,7 @@ export class App {
   }
 
   private gameMarkup(title: string, icon: string, controls: string): string {
-    const directional = this.game?.id === 'dodger' || this.game?.id === 'jumper';
+    const directional = this.game?.id === 'dodger' || this.game?.id === 'jumper' || this.game?.id === 'breaker' || this.game?.id === 'sokoban';
     const responsive = Boolean(this.game?.mount);
     return '<div class="play-page' + (responsive ? ' is-strategy' : '') + '"><header class="play-header">' +
       '<button class="back-button" id="back-button" aria-label="返回游戏大厅"><span>←</span><span class="back-label">游戏大厅</span></button>' +
@@ -326,8 +326,10 @@ export class App {
       '<div class="canvas-wrap">' + (responsive ? '<div id="game-content" tabindex="0" aria-label="' + title + '游戏区域"></div>' : '<canvas id="game-canvas" width="960" height="540" tabindex="0" aria-label="' + title + '游戏区域"></canvas>') +
       '<div class="game-overlay" id="game-overlay"><div class="overlay-card"><span class="overlay-kicker">POCKET PLAY</span><h2 id="overlay-title"></h2><p id="overlay-description"></p><div class="result-next-step" id="result-next-step" hidden><p id="result-next-step-copy" aria-live="polite"></p><button class="result-next-action" id="result-next-action" type="button"></button></div><div class="setup-picker" id="setup-picker"></div><button class="primary-button" id="overlay-action"></button><button class="text-button" id="overlay-secondary">回到游戏大厅</button></div></div></div></section>' +
       '<div class="play-bottom"><div class="control-hint"><span class="hint-icon">⌨</span><span>' + controls + '</span><span class="hint-divider">·</span><span>Esc 退出全屏 / 返回大厅</span></div>' +
-      (directional ? '<div class="touch-controls" aria-label="触屏方向控制"><button type="button" data-key="left" aria-label="向左">←</button><button type="button" data-key="right" aria-label="向右">→</button></div>' : '') +
+      (directional ? '<div class="touch-controls" aria-label="触屏方向控制"><button type="button" data-key="left" aria-label="向左">←</button>' + (this.game?.id === 'sokoban' ? '<button type="button" data-key="up" aria-label="向上">↑</button><button type="button" data-key="down" aria-label="向下">↓</button>' : '') + '<button type="button" data-key="right" aria-label="向右">→</button></div>' : '') +
       (this.game?.id === 'stacker' ? '<button type="button" class="game-tap-action" id="game-tap-action" disabled>放下云朵</button>' : '') +
+      (this.game?.id === 'breaker' ? '<button type="button" class="game-tap-action" id="game-tap-action" disabled>发射 / 确认升级</button>' : '') +
+      (this.game?.id === 'sokoban' ? '<button type="button" class="game-tap-action" id="game-tap-action" disabled>撤回 / 下一岛</button>' : '') +
       '<div class="bottom-tip"><span class="tip-star">✦</span> 玩得开心就好</div></div></main></div>';
   }
 
@@ -619,13 +621,17 @@ export class App {
             (fishingSighting ? '今日鱼影：' + fishingSighting.fish.name + ' · 首钓得 ' + fishingSighting.reward + ' 枚贝壳。' : '') +
             (fishingQuest ? '每日委托：' + fishingQuest.title + '（' + fishingQuest.progress + '/' + fishingQuest.target + '）。' : '')
           : this.game.id === 'dodger'
-            ? '左右移动躲开石头和路锥。连续贴边闪过会逐步加分，连续捡到星星也能叠加奖励；跑到 20 秒和 40 秒会进入新的路线。'
+            ? '左右移动躲开障碍。捡星、险闪可充满护盾；穿门预警后跟随星星缺口，无伤通过获得奖励。'
             : this.game.id === 'jumper'
-              ? '开局先选路线：追星小径的星星平台更多但稍窄；弹簧巡游有更多弹簧、星星略少；稳步登高的平台更宽。左右移动帮猫猫踩稳平台，落地后自动弹起；提前判断横移与裂纹平台，连着踩中星星会叠加奖励。'
+              ? '左右移动，踩稳平台后自动弹起。新高度的中央精准落点可充能，三次获得救援云；星星、弹簧、横移和裂纹平台有不同机会。'
               : this.game.id === 'shells'
-                ? '交换横向或纵向相邻的贝壳、泡泡、珊瑚等物件，连成三个或更多即可消除。四连会留下星星贝壳，再次连到它时会清除整行和整列；连锁消除会叠加得分。'
+                ? '交换相邻物件，三枚消除，四连造星，双星清屏。可选潮池订单，依次收集目标物件交单加分。'
                 : this.game.id === 'stacker'
-                  ? '云砖会左右移动，点击画面、点下方按钮或按空格放下。对齐塔顶才能留下重叠部分，偏出去的部分会掉落；连续完美落点能恢复一些宽度。先选喜欢的节奏，看看能把小屋搭多高。'
+                  ? '点击或空格放下云砖，三连完美修复云宽。可选无尽叠塔，或在 8/16/24 层保住所需云宽、完成天际蓝图。'
+                  : this.game.id === 'sokoban'
+                    ? '把箱子推到金色目标格。箱子只能推、不能拉；点相邻格或使用方向键移动，空格撤回，完成后进入下一岛。'
+                  : this.game.id === 'breaker'
+                    ? '左右移动或拖动挡板接住弹珠，点击或空格发射。接住下落道具，关间选择永久升级，挑战六关远征。'
                   : this.game.id === 'extraction'
                     ? '移动探索，靠近宝物按 E 或点拾取；自动攻击附近敌人，空格冲刺。携宝返回绿色撤离区，停留 4 秒即可带走收益。5 分钟后遗迹封锁。'
                   : this.game.id === 'autochess'
@@ -636,8 +642,8 @@ export class App {
       playing: { title: '', body: '', action: '' },
       paused: { title: '休息一下', body: '游戏已经暂停，准备好后继续挑战。', action: '继续游戏' },
       ended: {
-        title: this.game.id === 'shells' && shellStarCount === 3 ? '潮池三星达成！' : '这一局结束啦',
-        body: this.game.outcome + ' · 本局得分 ' + this.game.score + (this.game.id === 'shells' ? '。' + shellResultCopy : questCopy),
+        title: this.game.resultTitle || (this.game.id === 'shells' && shellStarCount === 3 ? '潮池三星达成！' : '这一局结束啦'),
+        body: (this.game.resultSummary || this.game.outcome) + ' · 本局得分 ' + this.game.score + (this.game.id === 'shells' ? '。' + shellResultCopy : this.game.resultSummary ? '' : questCopy),
         action: '再玩一次',
       },
     };
@@ -662,6 +668,14 @@ export class App {
     this.updateSetupPicker();
     title.textContent = current.title;
     description.textContent = current.body;
+    this.root.querySelector('#result-details')?.remove();
+    if (this.state === 'ended' && this.game.resultSummary) {
+      const details = document.createElement('details');
+      details.id = 'result-details'; details.className = 'result-details';
+      const summary = document.createElement('summary'); summary.textContent = '查看本局详情';
+      const body = document.createElement('p'); body.textContent = this.game.outcome + (this.game.id === 'shells' ? '。' + shellResultCopy : questCopy);
+      details.append(summary, body); description.after(details);
+    }
     if (nextStep) {
       if (nextStepCopyElement) nextStepCopyElement.textContent = nextStepCopy;
       nextStep.hidden = this.state !== 'ended' || !nextStepCopy;
@@ -695,6 +709,7 @@ export class App {
     }
 
     const selectedOptions = this.game.selectedSetupOptions;
+    const previousGroups = new Map(Array.from(picker.querySelectorAll<HTMLDetailsElement>('details[data-setup-group]')).map(group => [group.dataset.setupGroup, group.open]));
     const groups = Array.from(new Set(options.map((option) => option.group || '出发选项')));
     picker.innerHTML = groups.map((group) => {
       const groupOptions = options.filter((option) => (option.group || '出发选项') === group);
@@ -705,7 +720,10 @@ export class App {
         return '<button type="button" class="setup-option' + (selected ? ' is-selected' : '') + (option.unlocked ? '' : ' is-locked') + '" data-setup-option="' + option.id + '" aria-pressed="' + selected + '"' + (option.unlocked ? '' : ' disabled') + '>' +
           '<span class="setup-option-icon">' + option.icon + '</span><strong>' + option.label + '</strong><small>' + option.detail + '</small></button>';
       }).join('');
-      return '<section class="setup-group"><span class="setup-label">选择' + group + '</span><div class="setup-options">' + buttons + '</div></section>';
+      if (this.game?.id === 'autochess') return '<section class="setup-group"><span class="setup-label">选择' + group + '</span><div class="setup-options">' + buttons + '</div></section>';
+      const chosen = groupOptions.find(option => selectedOptions ? selectedOptions[group] === option.id : option.id === this.game?.selectedSetupOption);
+      const open = previousGroups.get(group) ?? (groups.length === 1 || group === '海域');
+      return '<details class="setup-group setup-fold" data-setup-group="' + group + '"' + (open ? ' open' : '') + '><summary><span>' + group + '</span><strong>' + (chosen ? chosen.icon + ' ' + chosen.label : '请选择') + '</strong></summary><div class="setup-options">' + buttons + '</div></details>';
     }).join('');
   }
 
@@ -719,7 +737,7 @@ export class App {
     setTextIfChanged(score, String(this.game.score));
     if (this.game.timeLeft === undefined) {
       setTextIfChanged(timeLabel, '模式');
-      setTextIfChanged(time, '无尽');
+      setTextIfChanged(time, this.game.modeLabel || '无尽');
     } else {
       setTextIfChanged(timeLabel, '剩余时间');
       setTextIfChanged(time, Math.ceil(this.game.timeLeft) + 's');

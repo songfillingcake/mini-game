@@ -24,7 +24,7 @@ export function renderHome(): string {
     const best = getBest(game.id);
     const featured = game.id === 'fishing';
     const progress = featured ? '图鉴 ' + journal.discovered + '/' + journal.total : '最佳 ' + best;
-    return '<button class="game-card ' + game.color + (featured ? ' is-featured' : '') + '" data-game="' + game.id + '" style="--card-order:' + index + '">' +
+    return '<button class="game-card ' + game.color + '" data-game="' + game.id + '" style="--card-order:' + index + '">' +
       '<span class="card-art"><span class="art-orbit"></span><span class="art-icon">' + game.icon + '</span><span class="art-spark spark-one">✦</span><span class="art-spark spark-two">✧</span></span>' +
       '<span class="card-copy"><span class="card-title">' + game.title + '</span>' +
       '<span class="card-subtitle">' + game.tag + '</span>' +

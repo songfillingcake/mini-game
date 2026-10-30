@@ -1,5 +1,8 @@
 import { clamp, drawText, HEIGHT, roundedRect, WIDTH } from '../../core/Game';
 import { audio } from '../../core/Audio';
+import { ReturnTrail } from './ReturnTrail';
+import { SteadyReel } from './SteadyReel';
+import { fishingSpots, getFishingSpot, fishingSpotWeight, type FishingSpotId } from './FishingSpots';
 import type { GameControls, GameSetupOption, MiniGame } from '../../core/Game';
 import { fishSpecies, fishingBaits, fishingZones, getDailyFishingEvent, getDailyFishingSighting, getDailyFishingWeather, getFishingDayPhase, getFishingDailyQuest, getFishingRodStats, getFishCounts, getFishFriendship, getFishJournalSummary, getFishTrophyRanks, getFishingBaitOptions, getFishingZoneOptions, getPreferredBait, getPreferredZone, getSelectedCatAccessory, getTrackedFish, recordFishCatch, rollFishLengthCm, savePreferredBait, savePreferredZone, type BaitId, type CatAccessoryId, type FishSpecies, type FishingBait, type FishingDailyEvent, type FishingDayPhase, type FishingWeather, type FishingZoneId } from './FishJournal';
 
@@ -53,6 +56,7 @@ export class FishingGame implements MiniGame {
   private reelPressCooldown = 0;
   private reelWindowResolved = false;
   private reelWasInSafeZone = false;
+  private steadyReel = new SteadyReel();
   private tideStage = 0;
   private tideFlash = 0;
   private lastCaughtFish: FishSpecies | null = null;
@@ -73,6 +77,9 @@ export class FishingGame implements MiniGame {
   private shoreMomentDownHeld = false;
   private trackedFish: FishSpecies | null = getTrackedFish();
   private trackedFishCatchCount = 0;
+  private returnTrail = new ReturnTrail();
+  private spotId: FishingSpotId = 'spot-open';
+  private runSpot: FishingSpotId = 'spot-open';
   private zoneUnlockFlash = 0;
   private zoneUnlockText = '';
   private milestoneFlash = 0;
@@ -91,6 +98,8 @@ export class FishingGame implements MiniGame {
   private readonly catAccessoryId: CatAccessoryId = getSelectedCatAccessory();
 
   get score(): number { return this.scoreValue; }
+  get resultTitle(): string { return this.discoveries > 0 ? '带回新发现！' : this.catches > 0 ? '鱼获上岸啦' : '下次再遇见'; }
+  get resultSummary(): string { return `钓到 ${this.catches} 条 · 新发现 ${this.discoveries} 种 · 收线章 +${this.trophyStarsEarned} 星`; }
   get setupOptions(): readonly GameSetupOption[] {
     const baitOptions = getFishingBaitOptions().map((bait) => ({
       id: bait.id,
@@ -112,10 +121,11 @@ export class FishingGame implements MiniGame {
       unlocked: zone.unlocked,
       unlockHint: zone.unlockHint,
     }));
-    return [...baitOptions, ...zoneOptions];
+    const spotOptions = fishingSpots.map(spot => ({ id: spot.id, group: '钓点', icon: spot.icon, label: spot.label, detail: spot.detail, unlocked: true }));
+    return [...baitOptions, ...zoneOptions, ...spotOptions];
   }
   get selectedSetupOption(): string { return this.baitId; }
-  get selectedSetupOptions(): Readonly<Record<string, string>> { return { 鱼饵: this.baitId, 海域: this.zoneId }; }
+  get selectedSetupOptions(): Readonly<Record<string, string>> { return { 鱼饵: this.baitId, 海域: this.zoneId, 钓点: this.spotId }; }
   get timeLeft(): number { return Math.max(0, 60 - this.elapsed); }
   get over(): boolean { return this.ended; }
   get outcome(): string {
@@ -126,16 +136,20 @@ export class FishingGame implements MiniGame {
     const sizeRecords = this.sizeRecordsEarned > 0 ? '，刷新鱼长纪录 ' + this.sizeRecordsEarned + ' 条' : '';
     const friendship = this.friendshipPointsEarned > 0 ? '，鱼友情升阶 +' + this.friendshipPointsEarned + ' 分' : '';
     const trackedCatch = this.trackedFishCatchCount > 0 ? '，追踪目标上岸 ' + this.trackedFishCatchCount + ' 条' : '';
-    const event = this.zoneId === this.dailyEvent.zone.id ? '，遇上' + this.dailyEvent.label : '';
-    return '在' + this.getZoneLabel() + '遇上' + this.dayPhase.label + '、' + this.weather.label + event + '，使用' + this.getBaitLabel() + '钓到 ' + this.catches + ' 条鱼，新发现 ' + this.discoveries + ' 个鱼种，收线章 +' + this.trophyStarsEarned + ' 星' + trackedCatch + friendship + sizeRecords + sighting + milestones;
+    const event = (this.zoneId === this.dailyEvent.zone.id ? '，遇上' + this.dailyEvent.label : '') + '，在' + getFishingSpot(this.runSpot).label + '垂钓';
+    return '在' + this.getZoneLabel() + '遇上' + this.dayPhase.label + '、' + this.weather.label + event + '，使用' + this.getBaitLabel() + '钓到 ' + this.catches + ' 条鱼，新发现 ' + this.discoveries + ' 个鱼种，收线章 +' + this.trophyStarsEarned + ' 星' + trackedCatch + friendship + sizeRecords + sighting + milestones + (this.returnTrail.recovered ? '，追回逃走的鱼 ' + this.returnTrail.recovered + ' 条' : '');
   }
   get statusText(): string {
+    if (this.returnTrail.pendingId) return '鱼影仍在 · 下次真咬钩回游';
+    if (this.returnTrail.active && (this.phase === 'bite' || this.phase === 'reeling')) return '回游机会 · 再试一次';
     if (this.isShoreMomentVisible()) return '岸边微光 · 可回应';
     if (this.shoreMomentBoost) return '微光引鱼中';
     return this.chain > 1 ? '连击 x' + this.chain : '收获 ' + this.catches + ' 条';
   }
 
   selectSetupOption(id: string): void {
+    const spot = fishingSpots.find(option => option.id === id);
+    if (spot) { this.spotId = spot.id; return; }
     const bait = getFishingBaitOptions().find((option) => option.id === id && option.unlocked);
     if (bait) {
       this.baitId = bait.id;
@@ -149,6 +163,7 @@ export class FishingGame implements MiniGame {
   }
 
   start(): void {
+    this.runSpot = this.spotId;
     this.dayPhase = getFishingDayPhase();
     this.elapsed = 0;
     this.phase = 'waiting';
@@ -196,6 +211,7 @@ export class FishingGame implements MiniGame {
     this.shoreMomentDownHeld = false;
     this.trackedFish = getTrackedFish();
     this.trackedFishCatchCount = 0;
+    this.returnTrail = new ReturnTrail();
     this.ended = false;
     this.message = '鱼竿准备好了，等鱼上钩';
   }
@@ -228,14 +244,16 @@ export class FishingGame implements MiniGame {
     this.phaseTimer -= dt;
     if (this.phase === 'reeling') {
       this.reelElapsed += dt;
+      this.steadyReel.update(dt);
       this.reelPressCooldown = Math.max(0, this.reelPressCooldown - dt);
-      this.reelTension = this.getReelTension();
+      this.reelTension = this.getReelTension(this.steadyReel.phaseTime);
       const inSafeZone = this.isInSafeZone(this.reelTension);
       if (inSafeZone && !this.reelWasInSafeZone) this.reelWindowResolved = false;
       this.reelWasInSafeZone = inSafeZone;
       if (this.phaseTimer <= 0) {
         this.chain = 0;
         this.message = (this.currentFish?.name || '鱼') + '挣脱了鱼线，再找机会吧';
+        if (this.returnTrail.reserve(this.currentFish?.id, this.elapsed)) this.message = '鱼影还在附近！下一次真咬钩会再回来';
         audio.play('miss');
         this.nextWait();
       }
@@ -438,7 +456,7 @@ export class FishingGame implements MiniGame {
     const isReeling = Boolean(this.currentFish && (this.phase === 'bite' || this.phase === 'reeling'));
     const lineOffset = isReeling ? 22 : 0;
     drawText(ctx, '今日奇遇 · ' + this.dailyEvent.icon + ' ' + this.dailyEvent.label + (this.zoneId === this.dailyEvent.zone.id ? '（已生效）' : ' · ' + this.dailyEvent.zone.label), 690, 362 + lineOffset, 12, hudMuted, 700);
-    drawText(ctx, '本局海域：' + this.getZoneLabel(), 690, 386 + lineOffset, 14, hudMuted, 700);
+    drawText(ctx, this.getZoneLabel() + ' · ' + getFishingSpot(this.runSpot).label, 690, 386 + lineOffset, 14, hudMuted, 700);
     drawText(ctx, '猫猫装备 · ' + this.rod.label + ' Lv.' + this.rod.level, 690, 414 + lineOffset, 14, hudMuted, 700);
     const sightingFish = fishSpecies.find((fish) => fish.id === this.dailySightingFishId);
     if (this.trackedFish) {
@@ -477,6 +495,14 @@ export class FishingGame implements MiniGame {
 
   private pickFish(): FishSpecies {
     const availableFish = this.getAvailableFish();
+    const returningId = this.returnTrail.take();
+    const returningFish = availableFish.find(fish => fish.id === returningId);
+    if (returningFish) {
+      if (returningFish.id === this.dailySightingFishId) this.sightingBitesSinceLast = 0;
+      this.consumeShoreMomentBoost();
+      return returningFish;
+    }
+    this.returnTrail.active = false;
     const sightingFish = availableFish.find((fish) => fish.id === this.dailySightingFishId);
     if (!this.dailySightingCompleted && sightingFish) {
       this.sightingBitesSinceLast += 1;
@@ -506,7 +532,7 @@ export class FishingGame implements MiniGame {
   }
 
   private getFishWeight(fish: FishSpecies, catchCounts?: Record<string, number>, trophyRanks?: Record<string, number>): number {
-    let weight = fish.weight;
+    let weight = fish.weight * fishingSpotWeight(this.runSpot, fish.rarity);
     if (this.baitId === 'cloud') {
       if (fish.rarity === '常见') weight *= 1.28;
       else if (fish.rarity === '稀有' || fish.rarity === '传说') weight *= 0.78;
@@ -746,6 +772,7 @@ export class FishingGame implements MiniGame {
       return;
     }
     this.phase = 'reeling';
+    this.steadyReel = new SteadyReel();
     this.reelElapsed = 0;
     this.reelDuration = this.getReelDuration(this.currentFish);
     this.phaseTimer = this.reelDuration;
@@ -759,7 +786,7 @@ export class FishingGame implements MiniGame {
   }
 
   private getReelDuration(fish: FishSpecies): number {
-    const baitBonus = this.baitId === 'cloud' ? 1.5 : this.baitId === 'starlight' ? -1.5 : 0;
+    const baitBonus = (this.baitId === 'cloud' ? 1.5 : this.baitId === 'starlight' ? -1.5 : 0) + getFishingSpot(this.runSpot).timeBonus;
     switch (fish.rarity) {
       case '常见': return Math.max(5, 12 + this.rod.timeBonus + baitBonus);
       case '少见': return Math.max(5, 11 + this.rod.timeBonus + baitBonus);
@@ -768,14 +795,14 @@ export class FishingGame implements MiniGame {
     }
   }
 
-  private getReelTension(): number {
+  private getReelTension(at = this.reelElapsed): number {
     const fish = this.currentFish;
     const speed = fish?.pullSpeed ?? 1.78;
     const weatherSpeed = this.weather.id === 'breeze' ? 1.15 : 1;
     const tideSpeed = this.weather.id === 'moon-tide' && this.tideStage === 2 ? 1.1 : 1;
-    const time = this.reelElapsed * speed * weatherSpeed * tideSpeed;
+    const time = at * speed * weatherSpeed * tideSpeed;
     const offset = this.reelPhaseOffset;
-    const mainPull = Math.sin(time + offset) * (fish?.pullAmplitude ?? 0.31);
+    const mainPull = Math.sin(time + offset) * (fish?.pullAmplitude ?? 0.31) * getFishingSpot(this.runSpot).pullScale;
     const afterPull = Math.sin(time * (fish?.secondarySpeed ?? 0.47) + offset * 0.6) * (fish?.secondaryAmplitude ?? 0.04);
     return clamp(0.5 + mainPull + afterPull, 0.04, 0.96);
   }
@@ -790,11 +817,14 @@ export class FishingGame implements MiniGame {
       }
       this.reelWindowResolved = true;
       this.reelProgress += 1;
+      const zone = this.getSafeZone();
+      const centered = Math.abs(this.reelTension - (zone.start + zone.end) / 2) <= (zone.end - zone.start) / 6;
+      if (centered) this.steadyReel.steady();
       audio.play('reel');
       if (this.reelProgress >= 3) {
         this.finishCatch();
       } else {
-        this.message = '拉得漂亮！再稳住 ' + (3 - this.reelProgress) + ' 次';
+        this.message = (centered ? '精准稳线！指针暂时变慢 · 再拉 ' : '拉得漂亮！再稳住 ') + (3 - this.reelProgress) + ' 次';
       }
       return;
     }
@@ -805,6 +835,7 @@ export class FishingGame implements MiniGame {
       if (this.reelMistakes >= 3) {
         this.chain = 0;
         this.message = (this.currentFish?.name || '鱼') + '挣脱了！下一次盯住绿色区';
+        if (this.returnTrail.reserve(this.currentFish?.id, this.elapsed)) this.message = '鱼影还在附近！下一次真咬钩会再回来';
         audio.play('miss');
         this.nextWait();
         return;
@@ -822,6 +853,7 @@ export class FishingGame implements MiniGame {
       this.nextWait();
       return;
     }
+    this.returnTrail.caught();
     const shellsBefore = getFishingDailyQuest().shells;
     const friendshipBefore = getFishFriendship(fish.id);
     const catchRecord = recordFishCatch(fish.id, this.reelMistakes, rollFishLengthCm(fish.id));
@@ -889,21 +921,21 @@ export class FishingGame implements MiniGame {
     const y = 406;
     const width = 380;
     const height = 20;
-    const calmEventBonus = this.zoneId === this.dailyEvent.zone.id && this.dailyEvent.effect === 'calm' ? 0.025 : 0;
-    const baitZoneBonus = this.baitId === 'cloud' ? 0.02 : 0;
-    const goodStart = this.rod.safeStart - calmEventBonus - baitZoneBonus;
-    const goodEnd = this.rod.safeEnd + calmEventBonus + baitZoneBonus;
+    const zone = this.getSafeZone();
+    const goodStart = zone.start, goodEnd = zone.end;
     const needleX = x + width * this.reelTension;
     const danger = this.reelTension < 0.18 || this.reelTension > 0.82;
     const inSafeZone = this.isInSafeZone(this.reelTension);
-    const prompt = inSafeZone
+    const cooling = this.reelPressCooldown > 0;
+    const prompt = cooling ? '稳住 · 鱼线回弹中'
+      : inSafeZone
       ? this.reelWindowResolved
         ? '拉得好！等指针离开绿区后再按'
         : '现在按空格 / 点击 · 拉线 ' + (this.reelProgress + 1) + '/3'
       : danger
         ? '先稳住鱼线，等指针回到绿色区'
         : '盯住白色指针，进入绿色区就按';
-    const promptIsActionable = inSafeZone && !this.reelWindowResolved;
+    const promptIsActionable = inSafeZone && !this.reelWindowResolved && !cooling;
 
     ctx.fillStyle = promptIsActionable
       ? 'rgba(192,245,207,.96)'
@@ -914,7 +946,9 @@ export class FishingGame implements MiniGame {
     ctx.fill();
     drawText(ctx, prompt, WIDTH / 2, 360.5, 12, promptIsActionable ? '#20533d' : inSafeZone || danger ? '#765019' : '#fff8df', 800);
 
-    drawText(ctx, '鱼线张力', WIDTH / 2, y - 27, 14, '#fff8df', 700);
+    const future = this.getReelTension(this.steadyReel.forecast(.16));
+    const trend = future - this.reelTension;
+    drawText(ctx, (this.steadyReel.active ? '稳线中 ' : '鱼线张力 ') + (Math.abs(trend) < .008 ? '· 转向' : trend > 0 ? '→ 收紧' : '← 回落'), WIDTH / 2, y - 27, 14, '#fff8df', 700);
     ctx.fillStyle = 'rgba(30,77,79,.9)';
     roundedRect(ctx, x, y, width, height, 10);
     ctx.fill();
@@ -925,11 +959,16 @@ export class FishingGame implements MiniGame {
     ctx.fillRect(x + width * 0.18, y, width * (goodStart - 0.18), height);
     ctx.fillStyle = 'rgba(105,205,155,.95)';
     ctx.fillRect(x + width * goodStart, y, width * (goodEnd - goodStart), height);
+    ctx.fillStyle = this.steadyReel.active ? '#e9e6a3' : '#b4e5a4';
+    ctx.fillRect(x + width * (goodStart + (goodEnd - goodStart) / 3), y + 2, width * (goodEnd - goodStart) / 3, height - 4);
     ctx.fillStyle = 'rgba(241,185,79,.64)';
     ctx.fillRect(x + width * goodEnd, y, width * (0.82 - goodEnd), height);
     ctx.fillStyle = 'rgba(239,119,102,.72)';
     ctx.fillRect(x + width * 0.82, y, width * 0.18, height);
     drawText(ctx, '稳住', x + width * (goodStart + goodEnd) / 2, y + height / 2, 10, '#27654f', 900);
+    // A faint forecast uses the same tension function; it never advances the simulation.
+    ctx.save(); ctx.strokeStyle = 'rgba(255,255,255,.4)'; ctx.lineWidth = 2; ctx.setLineDash([3, 4]);
+    ctx.beginPath(); ctx.moveTo(x + width * future, y - 4); ctx.lineTo(x + width * future, y + height + 4); ctx.stroke(); ctx.restore();
     ctx.strokeStyle = '#fffdf4';
     ctx.lineWidth = 3;
     ctx.beginPath();
@@ -953,6 +992,7 @@ export class FishingGame implements MiniGame {
   }
 
   private resetReel(): void {
+    this.steadyReel = new SteadyReel();
     this.reelElapsed = 0;
     this.reelDuration = 0;
     this.reelTension = 0.5;
@@ -964,11 +1004,13 @@ export class FishingGame implements MiniGame {
     this.reelWasInSafeZone = false;
   }
 
-  private isInSafeZone(tension: number): boolean {
+  private getSafeZone(): { start: number; end: number } {
     const eventBonus = this.zoneId === this.dailyEvent.zone.id && this.dailyEvent.effect === 'calm' ? 0.025 : 0;
     const baitZoneBonus = this.baitId === 'cloud' ? 0.02 : 0;
-    return tension >= this.rod.safeStart - eventBonus - baitZoneBonus && tension <= this.rod.safeEnd + eventBonus + baitZoneBonus;
+    const spotBonus = getFishingSpot(this.runSpot).safeBonus;
+    return { start: this.rod.safeStart - eventBonus - baitZoneBonus - spotBonus, end: this.rod.safeEnd + eventBonus + baitZoneBonus + spotBonus };
   }
+  private isInSafeZone(tension: number): boolean { const zone = this.getSafeZone(); return tension >= zone.start && tension <= zone.end; }
 
   private getBiteMessage(fish: FishSpecies | null): string {
     if (!fish) return '咬钩啦！快点收竿！';

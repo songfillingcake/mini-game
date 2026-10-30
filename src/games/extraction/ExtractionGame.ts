@@ -1,7 +1,8 @@
-import type { GameControls, MiniGame } from '../../core/Game';
+import type { GameControls, GameSetupOption, MiniGame } from '../../core/Game';
 import { MAP, relics } from './Content';
 import { ExtractionModel } from './ExtractionModel';
 import { renderExtraction } from './ExtractionRenderer';
+import { extractionLoadouts, type ExtractionLoadoutId } from './Loadouts';
 import './extraction.css';
 
 /** Adapter for the arcade lifecycle. Owns DOM and input only. */
@@ -20,13 +21,26 @@ export class ExtractionGame implements MiniGame {
   private interact = false;
   private stickId: number | null = null;
   private lastHud = '';
+  private loadoutId: ExtractionLoadoutId = 'runner';
+  get setupOptions(): readonly GameSetupOption[] {
+    return (Object.keys(extractionLoadouts) as ExtractionLoadoutId[]).map(id => {
+      const role = extractionLoadouts[id];
+      return { id, group: '角色', icon: role.icon, label: role.name, detail: role.detail, unlocked: true };
+    });
+  }
+  get selectedSetupOption(): string { return this.loadoutId; }
+  selectSetupOption(id: string): void {
+    if (Object.prototype.hasOwnProperty.call(extractionLoadouts, id)) this.loadoutId = id as ExtractionLoadoutId;
+  }
   get score(): number { return this.model.phase === 'escaped' ? this.model.value : 0; }
+  get resultTitle(): string { return this.model.phase === 'escaped' ? '撤离成功！' : this.model.phase === 'timeout' ? '遗迹已封锁' : '战利品未能带出'; }
+  get resultSummary(): string { return this.model.phase === 'escaped' ? `带出 ${this.model.bag.length} 件宝物 · 价值 ${this.model.value}` : '本次携带的宝物遗失，下次可提前撤离。'; }
   get over(): boolean { return this.model.phase !== 'playing'; }
   get timeLeft(): number { return Math.max(0, MAP.duration - this.model.elapsed); }
   get statusText(): string { return this.model.weight + '/10 负重 · 携带 ' + this.model.value; }
   get outcome(): string {
     const m = this.model;
-    return m.phase === 'escaped' ? `成功带出 ${m.bag.length} 件宝物，价值 ${m.value}！击退 ${m.kills} 名守卫。` : (m.phase === 'dead' ? '探险者倒下，本次携带的宝物遗失。' : '遗迹已封锁，未能及时带出宝物。') + ' 下次可以提前返回撤离区。';
+    return m.phase === 'escaped' ? `${m.loadout.name}成功带出 ${m.bag.length} 件宝物，价值 ${m.value}！击退 ${m.kills} 名守卫。` : (m.phase === 'dead' ? '探险者倒下，本次携带的宝物遗失。' : '遗迹已封锁，未能及时带出宝物。') + ' 下次可以提前返回撤离区。';
   }
   mount(host: HTMLElement): void {
     this.host = host;
@@ -35,9 +49,14 @@ export class ExtractionGame implements MiniGame {
     const signal = this.abort.signal;
     host.addEventListener('click', event => {
       if (!this.active) return;
-      const action = (event.target as Element).closest<HTMLElement>('[data-ex]')?.dataset.ex;
+      const control = (event.target as Element).closest<HTMLElement>('[data-ex]');
+      const action = control?.dataset.ex;
       if (action === 'pickup') this.model.pickup();
       if (action === 'drop') this.model.drop();
+      if (action === 'drop-item' && control?.dataset.item !== undefined) {
+        const id = Number(control.dataset.item);
+        if (Number.isInteger(id)) this.model.drop(id);
+      }
     }, { signal });
     const button = host.querySelector<HTMLButtonElement>('[data-ex="dash"]')!;
     button.addEventListener('pointerdown', event => { if (this.active) { this.dash = true; button.setPointerCapture(event.pointerId); } }, { signal });
@@ -61,7 +80,7 @@ export class ExtractionGame implements MiniGame {
     this.observer = new ResizeObserver(() => this.paint()); this.observer.observe(this.canvas!);
     this.paint(); this.hud();
   }
-  start(): void { this.model = new ExtractionModel(); this.started = true; this.lastHud = ''; this.hud(); this.paint(); }
+  start(): void { this.model = new ExtractionModel(this.loadoutId); this.started = true; this.lastHud = ''; this.hud(); this.paint(); }
   setActive(active: boolean): void {
     this.active = active;
     if (this.host) this.host.inert = !active;
@@ -85,16 +104,17 @@ export class ExtractionGame implements MiniGame {
     const set = (selector: string, text: string): void => { const el = this.host!.querySelector(selector); if (el && el.textContent !== text) el.textContent = text; };
     const time = Math.ceil(this.timeLeft);
     set('.ex-clock', `${Math.floor(time / 60)}:${String(time % 60).padStart(2, '0')}`);
-    set('.ex-health', `♥ ${Math.ceil(m.player.hp)} / 100`); set('.ex-value', `◆ ${m.value} 待带出`); set('.ex-weight', `背包 ${m.weight} / ${MAP.capacity}`);
-    set('.ex-toast', m.extraction > 0 ? `撤离中 ${Math.min(100, Math.floor(m.extraction / 4 * 100))}% · 留在圈内` : m.messageTime > 0 ? m.message : '');
+    set('.ex-health', `♥ ${Math.ceil(m.player.hp)} / ${m.loadout.hp}`); set('.ex-value', `◆ ${m.value} 待带出`); set('.ex-weight', `背包 ${m.weight} / ${MAP.capacity}`);
+    set('.ex-eyebrow', 'RELIC RUN / ' + m.loadout.name);
+    set('.ex-toast', m.extraction > 0 ? `撤离中 ${Math.min(100, Math.floor(m.extraction / 4 * 100))}% · 留在圈内` : m.search.id !== null ? `搜寻宝箱 ${Math.floor(m.search.progress * 10) * 10}% · 保持不动` : m.messageTime > 0 ? m.message : '');
     const dash = this.host.querySelector<HTMLButtonElement>('[data-ex="dash"]')!;
     dash.disabled = m.player.dashCooldown > 0; dash.textContent = m.player.dashCooldown > 0 ? `冲刺 ${m.player.dashCooldown.toFixed(1)}s` : '冲刺 · 空格';
     const near = m.nearestLoot;
-    set('[data-ex="pickup"]', near ? `拾取 ${relics[near.type].glyph} · E` : '拾取 · E');
+    set('[data-ex="pickup"]', near?.sealed ? '搜寻宝箱 · E' : near ? `拾取 ${relics[near.type].glyph} · E` : '拾取 · E');
     const signature = m.bag.map(p => `${p.id}:${p.bonus}`).join(',');
     if (signature !== this.lastHud || !this.host.querySelector('.ex-items')!.childElementCount) {
       this.lastHud = signature;
-      this.host.querySelector('.ex-items')!.innerHTML = m.bag.length ? m.bag.map(p => { const d = relics[p.type]; return `<div class="ex-item" style="--relic:${d.color}"><span>${d.glyph}</span><div><strong>${d.name} <small>${d.value + p.bonus}</small></strong><p>${d.effect}</p></div></div>`; }).join('') : '<span class="ex-empty">背包空空 · 金色光点是宝物，绿色圆圈是撤离区</span>';
+      this.host.querySelector('.ex-items')!.innerHTML = m.bag.length ? m.bag.map(p => { const d = relics[p.type]; return `<div class="ex-item" style="--relic:${d.color}"><span>${d.glyph}</span><div><strong>${d.name} <small>${d.value + p.bonus}</small></strong><p>${d.effect} · 负重 ${d.weight}</p></div><button type="button" data-ex="drop-item" data-item="${p.id}" aria-label="放下${d.name}">放下</button></div>`; }).join('') : '<span class="ex-empty">背包空空 · 金色光点是宝物，绿色圆圈是撤离区</span>';
     }
     this.host.querySelector<HTMLButtonElement>('[data-ex="drop"]')!.disabled = !m.bag.length;
   }
